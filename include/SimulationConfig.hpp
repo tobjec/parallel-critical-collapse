@@ -9,7 +9,7 @@ struct SimulationConfig
     real_t EpsNewton, PrecisionNewton, SlowError;
     int OutEvery, MaxIterNewton;
     bool Verbose, UseLogGrid, Debug;
-    int NLeft, NRight;
+    size_t NLeft, NRight;
     real_t Tolerance;
     int TimeStep;
     real_t PrecisionIRK;

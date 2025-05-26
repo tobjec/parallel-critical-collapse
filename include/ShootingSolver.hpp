@@ -17,7 +17,7 @@ class ShootingSolver
     
         void integrateToMidpoint(
             const vec_complex& yInit, const vec_real& xGrid,
-            int startIdx, int endIdx, bool forward,
+            size_t startIdx, size_t endIdx, bool forward,
             vec_complex& yFinal);
     
         void computeMismatch(const vec_complex& yLeft, const vec_complex& yRight, vec_complex& mismatchOut);
@@ -26,6 +26,6 @@ class ShootingSolver
         ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, InitialConditionGenerator& initGen_, int maxIts_);
 
         void shoot(vec_complex& YLeft, vec_complex& YRight, const vec_real& gridX,
-                   int iLeft, int iRight, int iMid, vec_complex& mismatchOut);
+                   size_t iLeft, size_t iRight, size_t iMid, vec_complex& mismatchOut);
 
 };

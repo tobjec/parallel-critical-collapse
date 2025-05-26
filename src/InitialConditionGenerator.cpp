@@ -481,13 +481,13 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
 {
     vec_complex compVec1, compVec2;
     Delta = Y[2].real();
-    Y[2] = complex_t(-Y[Y.size()-2].real(), Y[2].imag());
+    Y[2] = -std::conj(Y[Y.size()-2]);
 
     fft.doubleModes(Y, compVec1, Ntau/2);
 
     fft.differentiate(compVec1, compVec2, Delta);
 
-    fft.inverseFFTComplex(compVec1, compVec1);
+    fft.inverseFFTComplex(compVec1, compVec1);    
 
     for (int j=0; j<Ntau/2; ++j)
     {
@@ -504,8 +504,10 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
         F[j+Ntau/2] = F[j];
     }
 
+   
+
     // Derivatives
-    fft.inverseFFTComplex(compVec2,compVec2);
+    fft.inverseFFTComplex(compVec2, compVec2);
 
     for (int j=0; j<Ntau/2; ++j)
     {
@@ -522,9 +524,10 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
         dFdt[j+Ntau/2] = dFdt[j];
     }
 
-    //IA2 from constraint
 
-    vec_real Coeff1, Coeff2;
+
+    //IA2 from constraint
+    vec_real Coeff1(Ntau), Coeff2(Ntau);
 
     for (int j=0; j<Ntau; ++j)
     {
@@ -538,7 +541,7 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
 }
 
 void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U, vec_real& V,
-     vec_real& F, real_t X)
+     vec_real& F)
 {
     vec_complex compVec1;
     Delta = Y[2].real();

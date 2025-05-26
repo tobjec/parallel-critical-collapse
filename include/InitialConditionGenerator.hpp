@@ -41,6 +41,6 @@ class InitialConditionGenerator
             vec_real& F, vec_real& IA2, vec_real& dUdt, vec_real& dVdt, vec_real& dFdt, real_t X);
         
         void StateVectorToFields(vec_complex& Y, vec_real& U, vec_real& V,
-            vec_real& F, real_t X);
+            vec_real& F);
 
 };

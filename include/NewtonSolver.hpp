@@ -9,17 +9,17 @@
 class NewtonSolver
 {
     private:
+        SimulationConfig config;
         int Ntau, Nnewton;
         real_t Dim, Delta;
         real_t EpsNewton, TolNewton;
         real_t XLeft, XMid, XRight;
-        int NLeft, NRight, iL, iR, iM;
-        SimulationConfig config;
+        size_t NLeft, NRight, iL, iM, iR;
     
+        InitialConditionGenerator initGen;
         vec_complex YLeft, YRight, mismatchOut;
         vec_real fc, psic, Up, XGrid, in0, out0;
     
-        InitialConditionGenerator initGen;
         std::unique_ptr<ShootingSolver> shooter;
     
         void initializeInput();

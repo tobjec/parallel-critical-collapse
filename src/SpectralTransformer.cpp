@@ -29,6 +29,7 @@ SpectralTransformer::~SpectralTransformer()
 void SpectralTransformer::forwardFFT(const vec_real& in, vec_complex& out)
 {
     std::copy(in.begin(), in.end(), real_data);
+
     fftw_execute(forward_plan);
 
     out.resize(N_freq);
@@ -58,7 +59,12 @@ void SpectralTransformer::inverseFFT(const vec_complex& in, vec_real& out)
 
 void SpectralTransformer::forwardFFTComplex(const vec_complex& in, vec_complex& out)
 {
-    std::copy(in.begin(), in.end(), complex_data);
+    for (int i = 0; i < N; ++i)
+    {
+        complex_data[i][0] = in[i].real();
+        complex_data[i][1] = in[i].imag();
+    }
+
     fftw_execute(forward_plan_complex);
 
     out.resize(N);
@@ -86,9 +92,9 @@ void SpectralTransformer::inverseFFTComplex(const vec_complex& in, vec_complex& 
 
 }
 
-void SpectralTransformer::differentiate(const vec_complex& in, vec_complex& out, real_t period)
+void SpectralTransformer::differentiate(const vec_complex& in, vec_complex& out, real_t period_)
 {
-    int k0c = period == 0 ? k0 : 2*M_PI / period;
+    real_t k0c = (period_ == 0.0) ? k0 : 2*M_PI / period_;
     int size = static_cast<int>(in.size());
 
     if (size == N_freq)
@@ -98,7 +104,7 @@ void SpectralTransformer::differentiate(const vec_complex& in, vec_complex& out,
 
         for (int k = 0; k < size-1; ++k)
         {
-            out[k] = -complex_t(0.0, k*k0c) * in[k];
+            out[k] = complex_t(0.0, k*k0c) * in[k];
         }
 
         out[size-1] = complex_t(0.0);
@@ -113,7 +119,7 @@ void SpectralTransformer::differentiate(const vec_complex& in, vec_complex& out,
             if (k != size/2)
             {
                 int m = (k < size/2) ? k : k-size;
-                out[k] = -complex_t(0.0, m*k0c) * in[k];
+                out[k] = complex_t(0.0, m*k0c) * in[k];
             }
             else
             {
@@ -123,10 +129,10 @@ void SpectralTransformer::differentiate(const vec_complex& in, vec_complex& out,
     }    
 }
 
-void SpectralTransformer::lamIntegrate(const vec_complex& fk, vec_complex& out, complex_t lambda, real_t period)
+void SpectralTransformer::lamIntegrate(const vec_complex& fk, vec_complex& out, complex_t lambda, real_t period_)
 {
 
-    int k0c = period == 0 ? k0 : 2*M_PI / period;
+    real_t k0c = (period_ == 0.0) ? k0 : 2*M_PI / period_;
     int size = static_cast<int>(fk.size());
 
     if (size == N_freq)
@@ -137,11 +143,11 @@ void SpectralTransformer::lamIntegrate(const vec_complex& fk, vec_complex& out, 
 
         for (int k = 1; k < size-1; ++k)
         {
-            complex_t denom = lambda - complex_t(0.0, k * k0c);
+            complex_t denom = lambda + complex_t(0.0, k * k0c);
             out[k] = (std::abs(denom) < 1e-14) ? complex_t(0.0) : fk[k] / denom;
         }
 
-        out[size-1] = lambda / (std::pow(lambda,2) - std::pow(k0c*(size-1),2)) * fk[size-1];
+        out[size-1] = lambda / (std::pow(lambda,2) + std::pow(k0c*(size-1),2)) * fk[size-1];
     }
     else
     {
@@ -154,21 +160,21 @@ void SpectralTransformer::lamIntegrate(const vec_complex& fk, vec_complex& out, 
             if (k != size/2)
             {
                 int m = (k < size/2) ? k : k-size;
-                complex_t denom = lambda - complex_t(0.0, m * k0c);
+                complex_t denom = lambda + complex_t(0.0, m * k0c);
                 out[k] = (std::abs(denom) < 1e-14) ? complex_t(0.0) : fk[k] / denom;
             }
             else
             {
-                out[size/2-1] = lambda / (std::pow(lambda,2) - std::pow(k0c*(size/2-1),2)) * fk[size/2-1];
+                out[size/2-1] = lambda / (std::pow(lambda,2) + std::pow(k0c*(size/2-1),2)) * fk[size/2-1];
             }   
         }
     }
 }
 
-real_t SpectralTransformer::interpolate(const vec_complex& fk, real_t x, real_t period)
+real_t SpectralTransformer::interpolate(const vec_complex& fk, real_t x, real_t period_)
 {
     real_t result = 0.0;
-    int k0c = period == 0 ? k0 : 2*M_PI / period;
+    real_t k0c = (period_ == 0.0) ? k0 : 2*M_PI / period_;
     int size = static_cast<int>(fk.size());
 
     if (size == N_freq)
@@ -206,12 +212,12 @@ void SpectralTransformer::halveModes(const vec_complex& in, vec_complex& out, in
     {
         int N_out = N_in/2 + 1;
 
-        for (int k = 0; k < N_out; ++k)
+        for (int k = 0; k < N_out-1; ++k)
         {
             out[k] = in[k];
         }
 
-        out[N_out] = 2.0 * in[N_out];
+        out[N_out-1] = in[N_out-1] + std::conj(in[N_out-1]); // unsure whether this is true
 
         out.resize(N_out);
     }
@@ -234,25 +240,29 @@ void SpectralTransformer::halveModes(const vec_complex& in, vec_complex& out, in
         out.resize(N_out);
     }
     
-
 }
 
 void SpectralTransformer::doubleModes(const vec_complex& in, vec_complex& out, int Nsize)
 {
     int N_in = (Nsize > 0 ) ? Nsize : static_cast<int>(in.size());
 
-    if (N_in == N_freq)
+    if (N_in == N_freq/2+1)
     {
-        int N_out = 2 * (N_in-1);
+        int N_out = 2 * N_in - 1;
 
         out.resize(N_out);
 
-        for (int k = 0; k < N_in; ++k)
+        for (int k = 0; k < N_in-1; ++k)
         {
             out[k] = in[k];
         }
 
-        out[N_in] = 0.5 * in[N_in];
+        out[N_in-1] = 0.5 * in[N_in-1];
+
+        for (int k = N_in; k < N_out; ++k)
+        {
+            out[k] = complex_t(0.0);
+        }
     }
     else
     {
@@ -283,11 +293,11 @@ void SpectralTransformer::doubleModes(const vec_complex& in, vec_complex& out, i
 
 }
 
-void SpectralTransformer::solveInhom(const vec_real& f, const vec_real& g, vec_real& x, real_t period)
+void SpectralTransformer::solveInhom(const vec_real& f, const vec_real& g, vec_real& x, real_t period_)
 {
     vec_complex f_hat, F_hat;
     forwardFFT(f, f_hat);
-    lamIntegrate(f_hat, F_hat, complex_t(0.0), period);
+    lamIntegrate(f_hat, F_hat, complex_t(0.0), period_);
     inverseFFT(F_hat, x);
 
     vec_real F_real = x;
@@ -300,7 +310,7 @@ void SpectralTransformer::solveInhom(const vec_real& f, const vec_real& g, vec_r
 
     vec_complex h_hat, H_hat;
     forwardFFT(h, h_hat);
-    lamIntegrate(h_hat, H_hat, f_hat[0], period);
+    lamIntegrate(h_hat, H_hat, f_hat[0], period_);
     inverseFFT(H_hat, x);
 
     for (int i = 0; i < N; ++i)

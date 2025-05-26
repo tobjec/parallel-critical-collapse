@@ -7,9 +7,8 @@ ShootingSolver::ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, Initia
 }
 
 void ShootingSolver::shoot(vec_complex& YLeft, vec_complex& YRight, const vec_real& gridX,
-    int iLeft, int iRight, int iMid, vec_complex& mismatchOut)
+    size_t iLeft, size_t iRight, size_t iMid, vec_complex& mismatchOut)
 {
-
     integrateToMidpoint(YLeft, gridX, iLeft, iMid, true, YLeft);
     integrateToMidpoint(YRight, gridX, iRight, iMid, false, YRight);
 
@@ -18,25 +17,27 @@ void ShootingSolver::shoot(vec_complex& YLeft, vec_complex& YRight, const vec_re
 
 void ShootingSolver::integrateToMidpoint(
     const vec_complex& Yinit, const vec_real& xGrid,
-    int startIdx, int endIdx, bool forward,
+    size_t startIdx, size_t endIdx, bool forward,
     vec_complex& Yfinal)
 {
-    vec_complex Y1=Yinit, Y2;
+    vec_complex Y1=Yinit, Y2=Yinit;
 
     if (forward)
     {
-        for (int i=startIdx; i<endIdx; ++i)
+        for (size_t i=startIdx; i<endIdx; ++i)
         {
             stepper->integrate(Y1, Y2, xGrid[i], xGrid[i+1], converged, itsReached, maxIts);
+            Y1 = Y2;
         }
         Yfinal = Y2;
         
     }
     else
     {
-        for (int i=startIdx; i>endIdx; --i)
+        for (size_t i=startIdx; i>endIdx; --i)
         {
             stepper->integrate(Y1, Y2, xGrid[i], xGrid[i-1], converged, itsReached, maxIts);
+            Y1 = Y2;
         }
         Yfinal = Y2;
 
@@ -46,11 +47,16 @@ void ShootingSolver::integrateToMidpoint(
 void ShootingSolver::computeMismatch(
     const vec_complex& yLeft, const vec_complex& yRight, vec_complex& mismatchOut)
 {
-    
-    mismatchOut.resize(Ntau);
-    for (int i=0; i<Ntau/2; ++i)
+    size_t size = yLeft.size();
+    mismatchOut.resize(size);
+    for (size_t i=0; i<size; ++i)
     {
         mismatchOut[i] = yRight[i] - yLeft[i];
+    }
+
+    if (mismatchOut[2].real() > Precision)
+    {
+        std::cout << "Mismatch in Delta from left and right side!!!" << std::endl;
     }
 
     // Enforce consistency of Delta value

@@ -3,7 +3,7 @@
 ODEStepper::ODEStepper(int Ntau_, real_t Dim_, real_t precision_, Scheme method_, InitialConditionGenerator& initGen_)
     : Ntau(Ntau_), Dim(Dim_), precision(precision_), scheme(method_), initGen(initGen_)
     {
-        int stage {};
+        size_t stage {};
 
         switch (scheme)
         {
@@ -44,9 +44,6 @@ ODEStepper::ODEStepper(int Ntau_, real_t Dim_, real_t precision_, Scheme method_
                 c[1] = 0.5;
                 c[2] = 0.5 + std::sqrt(15.0) / 10.0;
 
-                break;
-
-            case Scheme::RKF45:
                 break;
         }
     }
@@ -105,11 +102,7 @@ void ODEStepper::integrate(vec_complex& Yin, vec_complex& Yout,
         case Scheme::IRK3:
             stepIRK(Yin, Yout, Xin, Xout, itsReached, converged, maxIts);
             break;
-        case Scheme::RKF45:
-            real_t dxTry = Xout - Xin;
-            stepRKF45(Yin, Yout, Xin, Xout, dxTry, converged, maxIts);
-            itsReached = 1;
-            break;
+
     }
 }
 
@@ -119,7 +112,7 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
                          bool& converged, int maxIts)
 {
     const real_t dx = Xout - Xin;
-    int stage = b.size();
+    int stage = static_cast<int>(b.size());
 
     vec_real x(stage);
     vec_real y(Ntau);
@@ -206,9 +199,3 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
         Yout[i] = complex_t(y[2*i], y[2*i+1]);
     }
 }
-
-// === RKF45 (adaptive)
-void ODEStepper::stepRKF45(vec_complex& yin, vec_complex& yout,
-                           real_t xin, real_t xout,
-                           real_t& dxNext, bool& converged, int maxIts)
-{}

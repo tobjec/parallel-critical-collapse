@@ -8,8 +8,8 @@ class ODEStepper
         int Ntau;
         real_t Dim;
         real_t precision;
-        InitialConditionGenerator& initGen;
         Scheme scheme;
+        InitialConditionGenerator& initGen;
         mat_real a;
         vec_real b, c;
 
@@ -18,10 +18,6 @@ class ODEStepper
         void stepIRK(vec_complex& Yin, vec_complex& Yout,
                     real_t Xin, real_t Xout, int& itsReached,
                     bool& converged, int maxIts);
-
-        void stepRKF45(vec_complex& Yin, vec_complex& Yout,
-                    real_t Xin, real_t Xout,
-                    real_t& dxNext, bool& converged, int maxIts);
 
     public:
 

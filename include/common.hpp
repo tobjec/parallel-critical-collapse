@@ -41,7 +41,7 @@
 // ========== Project Headers ================
 
 // ========== ENUM CLASSES ==========
-enum class Scheme { IRK2, IRK3, RKF45 };
+enum class Scheme { IRK2, IRK3 };
 
 // ========== Aliases ===============
 using real_t = double;
