@@ -1,0 +1,19 @@
+{
+    "Ny": 256,
+    "Dim": 4.0,
+    "XLeft": 0.001,
+    "XMid": 0.1,
+    "XRight": 0.999,
+    "EpsNewton": 1e-8,
+    "PrecisionNewton": 1e-14,
+    "Verbose": true,
+    "SlowError": 1e-3,
+    "OutEvery": 0,
+    "UseLogGrid": false,
+    "NLeft": 3000,
+    "NRight": 3000,
+    "Tolerance": 1e-15,
+    "TimeStep": 2,
+    "PrecisionIRK": 1e-15,
+    "Debug": false
+  }
