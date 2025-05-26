@@ -1,7 +1,7 @@
 #include "SpectralTransformer.hpp"
 
 SpectralTransformer::SpectralTransformer(int N_, real_t period_)
-    : N(N_), N_freq(N_ / 2 + 1), period(period_), k0(2.0*M_PI / period_)
+    : N(N_), N_freq(N_/2 + 1), period(period_), k0(2.0*M_PI / period_)
 {
     real_data = fftw_alloc_real(N);
     freq_data = fftw_alloc_complex(N_freq);
@@ -54,7 +54,7 @@ void SpectralTransformer::differentiate(const vec_complex& in, vec_complex& out)
 
     for (int k = 0; k < N_freq-1; ++k)
     {
-        out[k] = -complex_t(0.0, k * k0) * in[k];
+        out[k] = -complex_t(0.0, k*k0) * in[k];
     }
 
     out[N_freq-1] = complex_t(0.0);
@@ -91,44 +91,32 @@ real_t SpectralTransformer::interpolate(const vec_complex& fk, real_t x)
 void SpectralTransformer::halveModes(const vec_complex& in, vec_complex& out)
 {
     int N_in = static_cast<int>(in.size());
-    int N_out = N_in / 2;
+    int N_out = N_in/2 + 1;
 
-    out.assign(N_out, complex_t(0.0));
-
-    for (int k = 0; k < N_out/2; ++k)
+    for (int k = 0; k < N_out; ++k)
     {
         out[k] = in[k];
     }
 
-    out[N_out/2] = in[N_out/2] + in[3*N_out/2];
+    out[N_out] = 2.0 * in[N_out];
 
-    for (int k = N_out/2+1; k < N_out; ++k)
-    {
-        out[k] = in[k+N_out];
-    }
+    out.resize(N_out);
 
 }
 
 void SpectralTransformer::doubleModes(const vec_complex& in, vec_complex& out)
 {
     int N_in = static_cast<int>(in.size());
-    int N_out = 2 * N_in;
+    int N_out = 2 * (N_in-1);
 
-    out.assign(N_out, complex_t(0.0));
+    out.resize(N_out);
 
-    for (int k = 0; k < N_in/2; ++k)
+    for (int k = 0; k < N_in; ++k)
     {
         out[k] = in[k];
     }
 
-    out[N_in/2] = 0.5 * in[N_in/2];
-
-    out[3*N_in/2] = 0.5 * in[N_in/2];
-
-    for (int k=3*N_in/2+1; k<N_out; ++k)
-    {
-        out[k] = in[k-N_in];
-    }
+    out[N_in] = 0.5 * in[N_in];
 
 }
 

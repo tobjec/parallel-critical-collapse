@@ -54,7 +54,7 @@ void NewtonSolver::run(int maxIts)
 
         // Solving J dx = -out0
         vec_real dx(Nnewton);
-        vec_real rhs (out0.size() ,0); //= out0;
+        vec_real rhs = out0;
         std::for_each(rhs.begin(), rhs.end(), [](auto& ele){ele*=-1.0;});
 
         solveLinearSystem(J, rhs, dx);
@@ -72,7 +72,7 @@ void NewtonSolver::run(int maxIts)
     std::exit(EXIT_FAILURE);
 }
 
-void NewtonSolver::shoot(const vec_complex& inputVec, vec_complex& outputVec)
+void NewtonSolver::shoot(const vec_real& inputVec, vec_real& outputVec)
 {
     vec_real U(Ntau), V(Ntau), F(Ntau), IA2(Ntau), dummy(Ntau);
 
@@ -132,20 +132,20 @@ void NewtonSolver::generateGrid()
     }
 }
 
-void NewtonSolver::assembleJacobian(const vec_complex& baseInput, const vec_complex& baseOutput, mat_real& jacobian)
+void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput, mat_real& jacobian)
 {
 
     for (int i = 0; i < Nnewton; ++i)
     {
-        vec_complex perturbedInput = baseInput;
+        vec_real perturbedInput = baseInput;
         perturbedInput[i] += EpsNewton;
 
-        vec_complex perturbedOutput(Nnewton);
+        vec_real perturbedOutput(Nnewton);
         shoot(perturbedInput, perturbedOutput);
 
         for (int j = 0; j < Nnewton; ++j)
         {
-            jacobian[j][i] = (perturbedOutput[j].real() - baseOutput[j].real()) / EpsNewton;
+            jacobian[j][i] = (perturbedOutput[j] - baseOutput[j]) / EpsNewton;
         }
     }
 }
@@ -174,13 +174,10 @@ void NewtonSolver::solveLinearSystem(const mat_real& A_in, vec_real& rhs, vec_re
     dx = rhs;
 }
 
-real_t NewtonSolver::computeL2Norm(const vec_complex& vc)
+real_t NewtonSolver::computeL2Norm(const vec_real& vc)
 {
-    real_t sum = 0.0;
-    for (const auto& x : vc)
-    {
-        sum += std::pow(x.real(), 2) + std::pow(x.imag(), 2);
-    }
+    real_t sum = std::transform_reduce(vc.cbegin(), vc.cend(), 0.0, std::plus{},
+                                       [](auto x){return x*x;});
     return std::sqrt(sum / vc.size());
 }
 

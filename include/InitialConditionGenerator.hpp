@@ -29,9 +29,9 @@ class InitialConditionGenerator
 
         void packSpectralFields(
             const vec_real& Odd1, const vec_real& Odd2, const vec_real& Even,
-            vec_complex& Y);
+            vec_real& Z);
 
-        void unpackSpectralFields(const vec_complex& Y,
+        void unpackSpectralFields(const vec_real& Z,
             vec_real& Odd1, vec_real& Odd2, vec_real& Even);
         
         void FieldsToStateVector(const vec_real& U, const vec_real& V,

@@ -402,48 +402,56 @@ void InitialConditionGenerator::computeRightExpansion(
 
 void InitialConditionGenerator::packSpectralFields(
     const vec_real& Odd1, const vec_real& Odd2, const vec_real& Even,
-    vec_complex& Y)
+    vec_real& Z)
 {
     vec_complex Odd1F, Odd2F, EvenF;
     fft.forwardFFT(Odd1, Odd1F);
     fft.forwardFFT(Odd2, Odd2F);
     fft.forwardFFT(Even, EvenF);
+    fft.halveModes(Odd1F, Odd1F);
+    fft.halveModes(Odd2F, Odd2F);
+    fft.halveModes(EvenF, EvenF);
 
-    Y.resize(Nnewton);
+    Z.resize(Nnewton);
 
-    for (int j = 0; j < Nnewton / 3; ++j)
+    for (int j = 0; j < Nnewton/6; ++j)
     {
-        Y[j] = Odd1F[2*j+1];
-        Y[j+Nnewton/3] = Odd2F[2*j+1];
-        Y[j+2*Nnewton/3] = EvenF[2*j];
+        Z[j] = Odd1F[2*j+1].real();
+        Z[2*j+1] = Odd1F[2*j+1].imag();
+        Z[j+Nnewton/3] = Odd2F[2*j+1].real();
+        Z[2*j+1+Nnewton/3] = Odd2F[2*j+1].imag();
+        Z[j+2*Nnewton/3] = EvenF[2*j].real();
+        Z[2*j+1+2*Nnewton/3] = EvenF[2*j].imag();
     }
 
-    // High-frequency cosine stored in slot 2*N3/3
-    Y[2*Nnewton/3] = complex_t(Y[2*Nnewton/3].real(),EvenF[2*Nnewton/3].real());
+    Z[2*Nnewton/3+1] = EvenF[Nnewton/3].real();
+
 }
 
-void InitialConditionGenerator::unpackSpectralFields(const vec_complex& Y,
+void InitialConditionGenerator::unpackSpectralFields(const vec_real& Z,
     vec_real& Odd1, vec_real& Odd2, vec_real& Even)
 {
 
-    vec_complex Odd1F(Ntau/2, complex_t(0.0));
-    vec_complex Odd2F(Ntau/2, complex_t(0.0));
-    vec_complex EvenF(Ntau/2, complex_t(0.0));
+    vec_complex Odd1F(Ntau/4+1, complex_t(0.0));
+    vec_complex Odd2F(Ntau/4+1, complex_t(0.0));
+    vec_complex EvenF(Ntau/4+1, complex_t(0.0));
 
-    for (int j = 0; j < Nnewton / 3; ++j)
+    for (int j = 0; j < Nnewton/6; ++j)
     {
-        Odd1F[2*j+1] = Y[j];
-        Odd2F[2*j+1] = Y[j+Nnewton/3];
-        EvenF[2*j] = Y[j+2*Nnewton/3];
+        Odd1F[2*j+1] = complex_t(Z[j], Z[2*j+1]);
+        Odd2F[2*j+1] = complex_t(Z[j+Nnewton/3], Z[2*j+1+Nnewton/3]);
+        EvenF[2*j] = complex_t(Z[j+2*Nnewton/3], Z[2*j+1+2*Nnewton/3]);
     }
 
     EvenF[0] = complex_t(EvenF[0].real());
 
+    fft.doubleModes(Odd1F, Odd1F);
+    fft.doubleModes(Odd2F, Odd2F);
+    fft.doubleModes(EvenF, EvenF);
 
     // Restore high-frequency cosine
-    EvenF[2*Nnewton/3] = complex_t(EvenF[2*Nnewton/3].real());
+    // EvenF[2*Nnewton/3] = complex_t(EvenF[2*Nnewton/3].real());
 
-    // Inverse FFT → real space
     fft.inverseFFT(Odd1F, Odd1);
     fft.inverseFFT(Odd2F, Odd2);
     fft.inverseFFT(EvenF, Even);

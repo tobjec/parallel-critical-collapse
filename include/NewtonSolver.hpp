@@ -16,19 +16,19 @@ class NewtonSolver
         int NLeft, NRight, iL, iR, iM;
         SimulationConfig config;
     
-        vec_complex in0, out0, YLeft, YRight;
-        vec_real fc, psic, Up, XGrid, mismatchOut;
+        vec_complex YLeft, YRight;
+        vec_real fc, psic, Up, XGrid, mismatchOut, in0, out0;
     
         InitialConditionGenerator initGen;
         std::unique_ptr<ShootingSolver> shooter;
     
         void initializeInput();
         void generateGrid();
-        void shoot(const vec_complex& inputVec, vec_complex& outputVec);
-        void assembleJacobian(const vec_complex& baseInput, const vec_complex& baseOutput,
+        void shoot(const vec_real& inputVec, vec_real& outputVec);
+        void assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput,
                               mat_real& jacobian);
         void solveLinearSystem(const mat_real& A, vec_real& rhs, vec_real& dx);
-        real_t computeL2Norm(const vec_complex& vc);
+        real_t computeL2Norm(const vec_real& vc);
 
     public:
         NewtonSolver(SimulationConfig configIn);
