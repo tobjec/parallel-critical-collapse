@@ -5,47 +5,30 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Output directories
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/build)
-
-# Enable OpenMP
+# ---- dependencies ----------------------------------------------------------
 find_package(OpenMP REQUIRED)
-
-# Find FFTW and LAPACKE
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(FFTW REQUIRED IMPORTED_TARGET fftw3)
+
+pkg_check_modules(FFTW    REQUIRED IMPORTED_TARGET fftw3)
 pkg_check_modules(LAPACKE REQUIRED IMPORTED_TARGET lapacke)
 
-# JSON (header-only library)
-include(FetchContent)
-FetchContent_Declare(
-    json
-    URL https://github.com/nlohmann/json/releases/download/v3.11.2/json.hpp
-)
-FetchContent_MakeAvailable(json)
+# ---------- nlohmann/json ---------------------------------------------------
+find_package(nlohmann_json 3.11 QUIET)
+if (NOT TARGET nlohmann_json::nlohmann_json)
+    add_library(nlohmann_json::nlohmann_json INTERFACE)
+    target_include_directories(nlohmann_json::nlohmann_json INTERFACE
+                               /usr/include)   
+endif()
 
-# Include directories
-include_directories(${PROJECT_SOURCE_DIR}/include)
-
-# Source files
-file(GLOB_RECURSE SOURCES
-    ${PROJECT_SOURCE_DIR}/src/*.cpp
-)
-
-# Executable
+# ---- targets ---------------------------------------------------------------
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/src/*.cpp")
 add_executable(critical_collapse ${SOURCES})
 
-# Link libraries
-target_link_libraries(critical_collapse
+target_include_directories(critical_collapse PRIVATE "${PROJECT_SOURCE_DIR}/include")
+target_link_libraries(critical_collapse PRIVATE
     PkgConfig::FFTW
     PkgConfig::LAPACKE
     OpenMP::OpenMP_CXX
-)
+    nlohmann_json::nlohmann_json)
 
-# Add JSON
-target_include_directories(critical_collapse PRIVATE
-    ${json_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/include
-)
-
-# Installation (optional)
-install(TARGETS critical_collapse RUNTIME DESTINATION build)
+install(TARGETS critical_collapse RUNTIME DESTINATION bin)

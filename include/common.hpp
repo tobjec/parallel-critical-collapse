@@ -38,14 +38,18 @@
 #include <mkl.h>
 #endif
 
+// ========== Project Headers ================
+
 // ========== ENUM CLASSES ==========
 enum class Scheme { IRK2, IRK3, RKF45 };
 
-// ========== Aliases ==========
+// ========== Aliases ===============
 using real_t = double;
 using complex_t = std::complex<real_t>;
 using vec_real = std::vector<real_t>;
 using vec_complex = std::vector<complex_t>;
 using mat_real = std::vector<std::vector<real_t>>;
+using mat_complex = std::vector<std::vector<complex_t>>;
 using DerivativeFunc = std::function<void(real_t x, const vec_real& y, vec_real& dydx)>;
 using json = nlohmann::json;
+

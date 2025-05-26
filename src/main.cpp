@@ -7,19 +7,13 @@ int main(int argc, char** argv)
     try
     {
         // Load configuration
-        SimulationConfig config = SimulationConfig::loadFromJson("data/simulation.json");
+        SimulationConfig config = SimulationConfig::loadFromJson("../data/simulation.json");
 
         // Instantiate Newton solver with essential parameters
-        NewtonSolver solver(
-            config.Ny,
-            config.Dim,
-            config.XMid,     
-            config.EpsNewton,
-            config.PrecisionNewton
-        );
+        NewtonSolver solver(config);
 
         // Run solver
-        solver.run(50);
+        //solver.run(config.MaxIterNewton);
 
         std::cout << "Simulation finished successfully.\n";
     }

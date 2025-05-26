@@ -1,125 +1,151 @@
 #include "NewtonSolver.hpp"
-#include "OutputWriter.hpp"
 
-NewtonSolver::NewtonSolver(int numGridPts, real_t dim, real_t delta,
-                           real_t epsNewton, real_t tolNewton)
-    : ny(numGridPts), Dim(dim), Delta(delta),
-      EpsNewton(epsNewton), TolNewton(tolNewton),
-      initGen(numGridPts, dim, delta)
+NewtonSolver::NewtonSolver(SimulationConfig configIn)
+    : config(configIn), Ntau(configIn.Ntau), Nnewton(3*configIn.Ntau/4), Dim(configIn.Dim),
+      Delta(configIn.Delta), XLeft(configIn.XLeft), XMid(configIn.XMid), XRight(configIn.XRight),
+      EpsNewton(configIn.EpsNewton), TolNewton(configIn.PrecisionNewton),
+      initGen(configIn.Ntau, configIn.Dim, configIn.Delta)
 {
-    n3 = 3 * ny / 4;
-    in0.resize(n3);
-    out0.resize(n3);
-    change.resize(n3);
+    fc = configIn.fc;
+    psic = configIn.psic;
+    Up = configIn.Up;
+    mismatchOut.resize(Ntau);
+    in0.resize(3*configIn.Ntau/4);
+    out0.resize(3*configIn.Ntau/4);
+    NLeft = configIn.NLeft;
+    NRight = configIn.NRight;
+    iL = 0;
+    iM = NLeft;
+    iR = NLeft + NRight - 1;
 
-    shooter = std::make_unique<ShootingSolver>(ny, dim, delta);
+    YLeft.resize(Ntau);
+    YRight.resize(Ntau);
+
+    shooter = std::make_unique<ShootingSolver>(configIn.Ntau, configIn.Dim,
+                                               configIn.PrecisionIRK, initGen, configIn.MaxIterIRK);
 }
 
 void NewtonSolver::run(int maxIts)
 {
-    initializeInput();
-
     real_t err = 1.0;
-    vec_real inOld(n3);
     real_t fac = 1.0;
+
+    initGen.packSpectralFields(Up, psic, fc, in0);
+    generateGrid();
 
     for (int its = 0; its < maxIts; ++its)
     {
-        std::cout << ">> Newton iteration " << its << std::endl;
+        std::cout << "Newton iteration: " << its << std::endl;
 
-        // Save current input in case we need to restore it
-        inOld = in0;
-
-        // Evaluate current mismatch
         shoot(in0, out0);
+
         err = computeL2Norm(out0);
-        std::cout << "   mismatch norm: " << err << std::endl;
+        std::cout << "Mismatch norm: " << err << std::endl;
 
         if (err < TolNewton)
         {
-            std::cout << "✓ Converged!" << std::endl;
+            std::cout << "Converged!" << std::endl;
             writeFinalOutput();
             return;
         }
 
-        mat_real J(n3, vec_real(n3));
-        assembleJacobian(in0, J);
+        mat_real J(Nnewton, vec_real(Nnewton));
+        assembleJacobian(in0, out0, J);
 
-        // Solve J dx = -out0
-        vec_real dx(n3);
-        vec_real rhs = out0;
-        for (auto& r : rhs) r *= -1.0;
+        // Solving J dx = -out0
+        vec_real dx(Nnewton);
+        vec_real rhs (out0.size() ,0); //= out0;
+        std::for_each(rhs.begin(), rhs.end(), [](auto& ele){ele*=-1.0;});
 
         solveLinearSystem(J, rhs, dx);
 
         // Damping factor based on mismatch reduction
-        fac = std::min(1.0, err / 1e-3); // configurable slowerr
-
-        for (int i = 0; i < n3; ++i)
+        fac = std::min(1.0, err / 1e-3);
+        
+        for (int i = 0; i < Nnewton; ++i)
         {
             in0[i] += fac * dx[i];
         }
     }
 
-    std::cerr << "✗ Newton method did not converge in " << maxIts << " iterations." << std::endl;
+    std::cerr << "Newton method did not converge in " << maxIts << " iterations." << std::endl;
     std::exit(EXIT_FAILURE);
+}
+
+void NewtonSolver::shoot(const vec_complex& inputVec, vec_complex& outputVec)
+{
+    vec_real U(Ntau), V(Ntau), F(Ntau), IA2(Ntau), dummy(Ntau);
+
+    initGen.unpackSpectralFields(inputVec, Up, psic, fc);
+
+    // Initialize input for shooting
+    initializeInput();
+
+    // Shooting from left and right side
+    shooter->shoot(YLeft, YRight, XGrid, iL, iR, iM, mismatchOut);
+    
+    // Packing state vector to fields
+    //initGen.StateVectorToFields(mismatchOut, U, V, F, IA2, dummy, dummy, dummy, XMid);
+    
+    // Packing resulting fields to out vector
+    initGen.packSpectralFields(U, V, F, outputVec);
+
 }
 
 void NewtonSolver::initializeInput()
 {
-    const real_t XLeft = 1e-3;
-    const real_t XRight = 1.0 - 1e-3;
-
-    vec_real Fc(ny, 1.0);    // Initial guess
-    vec_real Psic(ny, 0.5);  // Initial guess
-    vec_real Up(ny, 0.1);    // Initial guess
-
-    vec_real U(ny), V(ny), F(ny);
-
-    initGen.computeRightExpansion(Up, XRight, U, V, F, false);
-
-    initGen.computeLeftExpansion(Fc, Psic, XLeft, U, V, F, false);
-
-    initGen.packSpectralFields(U, V, F, in0);
-
-    in0[ny / 2 + 2] = Delta;
+    initGen.computeLeftExpansion(XLeft, fc, psic, YLeft, false);
+    initGen.computeRightExpansion(XRight, Up, YRight, false);
 }
 
-void NewtonSolver::shoot(const vec_real& input, vec_real& output)
+void NewtonSolver::generateGrid()
 {
-    vec_real fc(ny, 1.0);
-    vec_real psic(ny, 0.5);
-    vec_real up(ny, 0.1);
-
-    // Build dummy x-grid
-    vec_real gridX(ny + 1);
-    real_t dx = 1.0 / ny;
-    for (int i = 0; i <= ny; ++i)
-        gridX[i] = i * dx;
-
-    const int iLeft = 0;
-    const int iRight = ny;
-    const int iMid = ny / 2;
-
-    shooter->shoot(fc, psic, up, gridX, iLeft, iRight, iMid, output);
-}
-
-void NewtonSolver::assembleJacobian(const vec_real& baseInput, mat_real& jacobian)
-{
-    vec_real baseOutput(n3);
-    shoot(baseInput, baseOutput);
-
-    for (int i = 0; i < n3; ++i)
+    if (config.UseLogGrid)
     {
-        vec_real perturbedInput = baseInput;
+        XGrid.push_back(XLeft);
+        XGrid[iR] = XRight;
+
+        // Uniform grid in z
+        real_t ZLeft = std::log(XLeft/(1-XLeft));
+        real_t ZMid = std::log(XMid/(1-XMid));
+        real_t ZRight = std::log(XRight/(1-XRight));
+
+        real_t dZL = (ZMid - ZLeft) / static_cast<real_t>(NLeft);
+        real_t dZR = (ZRight - ZMid) / static_cast<real_t>(NRight);
+
+        for (size_t j=iL+1; j<iM; ++j)
+        {
+            real_t exponent = ZLeft + static_cast<real_t>(j-iL) * dZL;
+            XGrid.push_back(std::exp(exponent) / (1.0 + std::exp(exponent)));
+        }
+
+        XGrid.push_back(XMid);
+
+        for (size_t j=iM+1; j<iR; ++j)
+        {
+            real_t exponent = ZMid + static_cast<size_t>(j-iM) * dZR;
+            XGrid.push_back(std::exp(exponent) / (1.0 + std::exp(exponent)));
+        }
+
+        XGrid.push_back(XRight);
+
+    }
+}
+
+void NewtonSolver::assembleJacobian(const vec_complex& baseInput, const vec_complex& baseOutput, mat_real& jacobian)
+{
+
+    for (int i = 0; i < Nnewton; ++i)
+    {
+        vec_complex perturbedInput = baseInput;
         perturbedInput[i] += EpsNewton;
 
-        vec_real perturbedOutput(n3);
+        vec_complex perturbedOutput(Nnewton);
         shoot(perturbedInput, perturbedOutput);
 
-        for (int j = 0; j < n3; ++j)
+        for (int j = 0; j < Nnewton; ++j)
         {
-            jacobian[j][i] = (perturbedOutput[j] - baseOutput[j]) / EpsNewton;
+            jacobian[j][i] = (perturbedOutput[j].real() - baseOutput[j].real()) / EpsNewton;
         }
     }
 }
@@ -131,7 +157,9 @@ void NewtonSolver::solveLinearSystem(const mat_real& A_in, vec_real& rhs, vec_re
     // Convert matrix to row-major double* for LAPACKE
     std::vector<real_t> A_flat(N * N);
     for (int i = 0; i < N; ++i)
+    {
         std::memcpy(&A_flat[i * N], A_in[i].data(), N * sizeof(real_t));
+    }
 
     std::vector<lapack_int> ipiv(N);
 
@@ -142,31 +170,25 @@ void NewtonSolver::solveLinearSystem(const mat_real& A_in, vec_real& rhs, vec_re
         std::exit(EXIT_FAILURE);
     }
 
-    dx = rhs; // solution vector
+    // Solution vector
+    dx = rhs;
 }
 
-real_t NewtonSolver::computeL2Norm(const vec_real& v)
+real_t NewtonSolver::computeL2Norm(const vec_complex& vc)
 {
     real_t sum = 0.0;
-    for (const auto& x : v)
-        sum += x * x;
-    return std::sqrt(sum / v.size());
+    for (const auto& x : vc)
+    {
+        sum += std::pow(x.real(), 2) + std::pow(x.imag(), 2);
+    }
+    return std::sqrt(sum / vc.size());
 }
 
 void NewtonSolver::writeFinalOutput()
 {
-    vec_real up(ny), psic(ny), fc(ny);
-    vec_real inCopy = in0;
-
-    // Remove Delta from spectral input for unpacking
-    inCopy[ny / 2 + 2] = 0.0;
-    initGen.unpackSpectralFields(inCopy, up, psic, fc);
-
-    real_t finalDelta = in0[ny / 2 + 2];
-
     // Append all to a structured JSON file
-    OutputWriter::appendResultToJson("data/results.json", Dim, finalDelta, fc, psic, up);
+    OutputWriter::appendResultToJson("data/results.json", Dim, Delta, fc, psic, Up);
 
-    std::cout << "✔ Final result stored under dimension d = " << Dim
+    std::cout << "Final result stored under dimension d = " << Dim
               << " in data/results.json\n";
 }

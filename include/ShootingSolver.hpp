@@ -1,4 +1,5 @@
 #pragma once
+
 #include "common.hpp"
 #include "SpectralTransformer.hpp"
 #include "InitialConditionGenerator.hpp"
@@ -7,25 +8,24 @@
 class ShootingSolver
 {
     private:
-        int numGridPts;
-        real_t dim, delta, precision;
-        InitialConditionGenerator initGen;
+        int Ntau;
+        real_t Dim, Precision;
+        InitialConditionGenerator& initGen;
         std::unique_ptr<ODEStepper> stepper;
+        bool converged=false;
+        int itsReached, maxIts;
     
         void integrateToMidpoint(
-            const vec_real& yInit, const vec_real& xGrid,
+            const vec_complex& yInit, const vec_real& xGrid,
             int startIdx, int endIdx, bool forward,
-            vec_real& yFinal);
+            vec_complex& yFinal);
     
-        void computeMismatch(const vec_real& yLeft, const vec_real& yRight, vec_real& mismatchOut);
+        void computeMismatch(const vec_complex& yLeft, const vec_complex& yRight, vec_real& mismatchOut);
             
     public:
-        ShootingSolver(int numGridPts, real_t dim, real_t delta, real_t precision);
+        ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, InitialConditionGenerator& initGen_, int maxIts_);
 
-        void shoot(
-            const vec_real& fc, const vec_real& psic, const vec_real& up,
-            const vec_real& gridX,  // x-grid
-            int iLeft, int iRight, int iMid,
-            vec_real& mismatchOut);
+        void shoot(vec_complex& YLeft, vec_complex& YRight, const vec_real& gridX,
+                   int iLeft, int iRight, int iMid, vec_real& mismatchOut);
 
 };

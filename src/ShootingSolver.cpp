@@ -1,85 +1,59 @@
-#include "common.hpp"
 #include "ShootingSolver.hpp"
-#include "ODEStepper.hpp" // Contains `implicitStep`
 
-static void derivs(real_t x, const vec_real& y, vec_real& dydx)
+ShootingSolver::ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, InitialConditionGenerator& initGen_, int maxIts_)
+    : Ntau(Ntau_), Dim(Dim_), Precision(precision_), initGen(initGen_), maxIts(maxIts_)
 {
-    // Placeholder — replicate the logic from derivs.f
-    // dydx = f(y, x, d, Delta, etc.)
-    dydx = y; // ← for now, identity just for structure
+    stepper = std::make_unique<ODEStepper>(Ntau_, Dim_, precision_, Scheme::IRK2, initGen);
 }
 
-
-ShootingSolver::ShootingSolver(int numGridPts_, real_t dim_, real_t delta_, real_t precision_)
-    : numGridPts(numGridPts_), dim(dim_), delta(delta_),
-      precision(precision_), initGen(numGridPts_, dim_, delta_)
+void ShootingSolver::shoot(vec_complex& YLeft, vec_complex& YRight, const vec_real& gridX,
+    int iLeft, int iRight, int iMid, vec_real& mismatchOut)
 {
-    stepper = std::make_unique<ODEStepper>(numGridPts_, dim_, precision_, Scheme::IRK2, derivs);
-}
 
-void ShootingSolver::shoot(
-    const vec_real& fc, const vec_real& psic, const vec_real& up,
-    const vec_real& gridX, int iLeft, int iRight, int iMid,
-    vec_real& mismatchOut)
-{
-    const int ny = numGridPts;
-    const int n3 = 3 * ny / 4;
+    integrateToMidpoint(YLeft, gridX, iLeft, iMid, true, YLeft);
+    integrateToMidpoint(YRight, gridX, iRight, iMid, false, YRight);
 
-    vec_real yLeft, yRight;
-    initGen.generateInitialCondition(fc, psic, up, gridX[iLeft], true, yLeft);
-    initGen.generateInitialCondition(fc, psic, up, gridX[iRight], false, yRight);
-
-    integrateToMidpoint(yLeft, gridX, iLeft, iMid, true, yLeft);
-    integrateToMidpoint(yRight, gridX, iRight, iMid, false, yRight);
-
-    computeMismatch(yLeft, yRight, mismatchOut);
+    computeMismatch(YLeft, YRight, mismatchOut);
 }
 
 void ShootingSolver::integrateToMidpoint(
-    const vec_real& yInit, const vec_real& xGrid,
+    const vec_complex& Yinit, const vec_real& xGrid,
     int startIdx, int endIdx, bool forward,
-    vec_real& yFinal)
+    vec_complex& Yfinal)
 {
-    const int direction = forward ? 1 : -1;
-    const int nSteps = std::abs(endIdx - startIdx);
+    vec_complex Y1=Yinit, Y2;
 
-    vec_real y = yInit;
-
-    for (int i = 0; i < nSteps; ++i)
+    if (forward)
     {
-        int idx = forward ? (startIdx + i) : (startIdx - i);
-        real_t x0 = xGrid[idx];
-        real_t x1 = xGrid[idx + direction];
-
-        bool converged = false;
-        int itsReached = 0;
-
-        vec_real yNext;
-        stepper->integrate(y, yNext, x0, x1, converged, itsReached);
-
-        if (!converged)
+        for (int i=startIdx; i<endIdx; ++i)
         {
-            std::cerr << "ERROR: ODE step failed to converge at x = " << x0 << std::endl;
-            std::exit(EXIT_FAILURE);
+            stepper->integrate(Y1, Y2, xGrid[i], xGrid[i+1], converged, itsReached, maxIts);
         }
-
-        y = yNext;  // advance solution
+        Yfinal = Y2;
+        
     }
+    else
+    {
+        for (int i=startIdx; i>endIdx; --i)
+        {
+            stepper->integrate(Y1, Y2, xGrid[i], xGrid[i-1], converged, itsReached, maxIts);
+        }
+        Yfinal = Y2;
 
-    yFinal = y;
+    }
 }
 
 void ShootingSolver::computeMismatch(
-    const vec_real& yLeft, const vec_real& yRight, vec_real& mismatchOut)
+    const vec_complex& yLeft, const vec_complex& yRight, vec_real& mismatchOut)
 {
-    const int ny = numGridPts;
-
-    mismatchOut.resize(ny);
-    for (int i = 0; i < ny; ++i)
+    
+    mismatchOut.resize(Ntau);
+    for (int i=0; i<Ntau/2; ++i)
     {
-        mismatchOut[i] = yRight[i] - yLeft[i];
+        mismatchOut[i] = yRight[i].real() - yLeft[i].real();
+        mismatchOut[i+1] = yRight[i].imag() - yLeft[i].imag();
     }
 
     // Enforce consistency of Delta value
-    mismatchOut[4] = delta;  // Fortran index y(5)
+    mismatchOut[4] = yLeft[2].real();  // Fortran index y(5)
 }

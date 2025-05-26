@@ -3,16 +3,19 @@
 
 struct SimulationConfig
 {
-    int Ny;
+    int Ntau;
     real_t Dim;
     real_t XLeft, XMid, XRight;
     real_t EpsNewton, PrecisionNewton, SlowError;
-    int OutEvery;
+    int OutEvery, MaxIterNewton;
     bool Verbose, UseLogGrid, Debug;
     int NLeft, NRight;
     real_t Tolerance;
     int TimeStep;
     real_t PrecisionIRK;
+    int MaxIterIRK;
+    real_t Delta;
+    vec_real fc, psic, Up;
 
     static SimulationConfig loadFromJson(const std::string& filename)
     {
@@ -26,16 +29,18 @@ struct SimulationConfig
         inFile >> j;
 
         return {
-            j["Ny"],
+            j["Ntau"],
             j["Dim"],
             j["XLeft"], j["XMid"], j["XRight"],
             j["EpsNewton"], j["PrecisionNewton"], j["SlowError"],
-            j["OutEvery"],
+            j["OutEvery"], j["MaxIterNewton"],
             j["Verbose"], j["UseLogGrid"], j["Debug"],
             j["NLeft"], j["NRight"],
             j["Tolerance"],
             j["TimeStep"],
-            j["PrecisionIRK"]
+            j["PrecisionIRK"], j["MaxIterIRK"], j["Initial_Conditions"]["Delta"],
+            j["Initial_Conditions"]["fc"], j["Initial_Conditions"]["psic"],
+            j["Initial_Conditions"]["Up"]
         };
     }
 };

@@ -31,25 +31,25 @@ void OutputWriter::appendResultToJson(const std::string& filename, real_t dim,
     real_t delta,
     const vec_real& fc,
     const vec_real& psic,
-    const vec_real& up)
+    const vec_real& Up)
 {
     json j;
 
     // Load existing results if file exists
     if (std::filesystem::exists(filename))
     {
-    std::ifstream inFile(filename);
-    inFile >> j;
+        std::ifstream inFile(filename);
+        inFile >> j;
     }
 
     // Convert everything to JSON
     std::string key = std::to_string(dim);
     j[key] = {
-    {"Delta", delta},
-    {"fc", fc},
-    {"psic", psic},
-    {"Up", up}
-    };
+                {"Delta", delta},
+                {"fc", fc},
+                {"psic", psic},
+                {"Up", Up}
+             };
 
     // Write back
     std::ofstream outFile(filename);

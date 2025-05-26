@@ -1,4 +1,5 @@
 #pragma once
+
 #include "common.hpp"
 #include "SpectralTransformer.hpp"
 
@@ -6,35 +7,37 @@ class InitialConditionGenerator
 {
 
     private:
-        int NumGridPts;       // Number of grid points
+        int Ntau, Nnewton;       // Number of grid points
         real_t Dim;           // Physical dimension (e.g., 4.0)
         real_t Delta;         // Period (used in FFT)
         SpectralTransformer fft; // Fourier engine      
 
     public:
-        InitialConditionGenerator(int NumGridPts, real_t Dim, real_t Delta);
+        InitialConditionGenerator(int Ntau_, real_t Dim_, real_t Delta_);
 
         // Compute Taylor expansion and return packed vector Y
         // isLeft = true  → x ≈ 0 expansion (order 5)
         // isLeft = false → x ≈ 1 expansion (order 3)
-        void generateInitialCondition(
-            const vec_real& Fc, const vec_real& Psic, const vec_real& Up,
-            real_t X, bool isLeft,
-            vec_real& Y, bool PrintDiagnostics = false);
         
         void computeLeftExpansion(
-            const vec_real& Fc, const vec_real& Psic, real_t X,
-            vec_real& U, vec_real& V, vec_real& F, bool PrintDiagnostics);
+            real_t XLeft, const vec_real& fc, const vec_real& psic,
+            vec_complex& Y, bool PrintDiagnostics);
 
         void computeRightExpansion(
-            const vec_real& Up, real_t X,
-            vec_real& U, vec_real& V, vec_real& F, bool PrintDiagnostics);
+            real_t XRight, const vec_real& Up, 
+            vec_complex& Y, bool PrintDiagnostics);
 
         void packSpectralFields(
-            const vec_real& U, const vec_real& V, const vec_real& F,
-            vec_real& Y);
+            const vec_real& Odd1, const vec_real& Odd2, const vec_real& Even,
+            vec_complex& Y);
 
-        void unpackSpectralFields(const vec_real& Y,
-            vec_real& U, vec_real& V, vec_real& F);
+        void unpackSpectralFields(const vec_complex& Y,
+            vec_real& Odd1, vec_real& Odd2, vec_real& Even);
+        
+        void FieldsToStateVector(const vec_real& U, const vec_real& V,
+            const vec_real& F, vec_complex& Y);
+
+        void StateVectorToFields(const vec_complex& Y, vec_real& U, vec_real& V,
+            vec_real& F, vec_real& IA2, vec_real& dU, vec_real& dV, vec_real& dF, real_t X);
 
 };
