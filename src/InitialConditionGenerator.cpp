@@ -5,8 +5,11 @@ InitialConditionGenerator::InitialConditionGenerator(int Ntau_, real_t Dim_, rea
 
 void InitialConditionGenerator::computeLeftExpansion(
     real_t XLeft, const vec_real& fc, const vec_real& psic,
-            vec_complex& Y, bool PrintDiagnostics)
+            vec_complex& Y, real_t DeltaIn, bool PrintDiagnostics)
 {
+
+    Delta = DeltaIn;
+
     // Step 1: Compute f0 and its derivatives
     const vec_real& f0 = fc;
     const vec_real& psi0 = psic;
@@ -15,15 +18,15 @@ void InitialConditionGenerator::computeLeftExpansion(
     vec_real df0dtau, d2f0dtau2, d3f0dtau3;
 
     fft.forwardFFT(f0, F0Hat);
-    fft.differentiate(F0Hat, DfHat);
+    fft.differentiate(F0Hat, DfHat, Delta);
     fft.inverseFFT(DfHat, df0dtau);
 
     fft.forwardFFT(df0dtau, D2fHat);
-    fft.differentiate(D2fHat, D2fHat);
+    fft.differentiate(D2fHat, D2fHat, Delta);
     fft.inverseFFT(D2fHat, d2f0dtau2);
 
     fft.forwardFFT(d2f0dtau2, D3fHat);
-    fft.differentiate(D3fHat, D3fHat);
+    fft.differentiate(D3fHat, D3fHat, Delta);
     fft.inverseFFT(D3fHat, d3f0dtau3);
 
     // Step 2: Solve inhomogeneous ODE for u1
@@ -32,26 +35,26 @@ void InitialConditionGenerator::computeLeftExpansion(
     {
         Coeff2[j] = -(Dim - 1.0) * psi0[j] * f0[j];
     }
-    fft.solveInhom(Coeff1, Coeff2, u1);
+    fft.solveInhom(Coeff1, Coeff2, u1, Delta);
 
     // Step 3: Compute derivatives of u1
     vec_complex U1Hat, dU1Hat, d2U1Hat, d3U1Hat, d4U1Hat;
     vec_real du1dtau, d2u1dtau2, d3u1dtau3, d4u1dtau4;
 
     fft.forwardFFT(u1, U1Hat);
-    fft.differentiate(U1Hat, dU1Hat);
+    fft.differentiate(U1Hat, dU1Hat, Delta);
     fft.inverseFFT(dU1Hat, du1dtau);
 
     fft.forwardFFT(du1dtau, d2U1Hat);
-    fft.differentiate(d2U1Hat, d2U1Hat);
+    fft.differentiate(d2U1Hat, d2U1Hat, Delta);
     fft.inverseFFT(d2U1Hat, d2u1dtau2);
 
     fft.forwardFFT(d2u1dtau2, d3U1Hat);
-    fft.differentiate(d3U1Hat, d3U1Hat);
+    fft.differentiate(d3U1Hat, d3U1Hat, Delta);
     fft.inverseFFT(d3U1Hat, d3u1dtau3);
 
     fft.forwardFFT(d3u1dtau3, d4U1Hat);
-    fft.differentiate(d4U1Hat, d4U1Hat);
+    fft.differentiate(d4U1Hat, d4U1Hat, Delta);
     fft.inverseFFT(d4U1Hat, d4u1dtau4);
 
     // Step 4: Taylor expansions
@@ -143,7 +146,7 @@ void InitialConditionGenerator::computeLeftExpansion(
         // Compose final Taylor expansion
         U[j] = XLeft * u1j + std::pow(XLeft, 2) * u2[j] + std::pow(XLeft, 3) * u3[j] + std::pow(XLeft, 4) * u4[j] + std::pow(XLeft, 5) * u5[j];
         V[j] = XLeft * v1[j] + std::pow(XLeft, 2) * v2[j] + std::pow(XLeft, 3) * v3[j] + std::pow(XLeft, 4) * v4[j] + std::pow(XLeft, 5) * v5[j];
-        F[j] = f + std::pow(XLeft, 2) * f2[j] + std::pow(XLeft, 4) * f4[j]; // f4 is not derived in Fortran, so left out here
+        F[j] = f + std::pow(XLeft, 2) * f2[j] + std::pow(XLeft, 4) * f4[j];
     }
 
     FieldsToStateVector(U,V,F,Y);
@@ -158,8 +161,9 @@ void InitialConditionGenerator::computeLeftExpansion(
 }
 
 void InitialConditionGenerator::computeRightExpansion(
-    real_t XRight, const vec_real& Up, vec_complex& Y, bool PrintDiagnostics)
+    real_t XRight, const vec_real& Up, vec_complex& Y, real_t DeltaIn, bool PrintDiagnostics)
 {
+    Delta = DeltaIn;
     const real_t Xp = 1.0;
     const real_t d = Dim;
     const real_t dx = XRight - Xp;
@@ -170,10 +174,10 @@ void InitialConditionGenerator::computeRightExpansion(
     vec_complex U0Hat, dU0Hat, d2U0Hat;
 
     fft.forwardFFT(u0, U0Hat);
-    fft.differentiate(U0Hat, dU0Hat);
+    fft.differentiate(U0Hat, dU0Hat, Delta);
     fft.inverseFFT(dU0Hat, du0);
 
-    fft.differentiate(dU0Hat, d2U0Hat);
+    fft.differentiate(dU0Hat, d2U0Hat, Delta);
     fft.inverseFFT(d2U0Hat, d2u0);
 
     // Step 2: Solve for ia20
@@ -183,7 +187,7 @@ void InitialConditionGenerator::computeRightExpansion(
         coeff1[j] = 3.0 - d - std::pow(d - 2.0, 3) * u0[j] * u0[j] / 4.0;
         coeff2[j] = d - 3.0;
     }
-    fft.solveInhom(coeff1, coeff2, ia20);
+    fft.solveInhom(coeff1, coeff2, ia20, Delta);
 
     // Step 3: Solve for v0
     vec_real v0;
@@ -192,7 +196,7 @@ void InitialConditionGenerator::computeRightExpansion(
         coeff1[j] = (6.0 - 2.0 * d + (d - 2.0) * ia20[j]) / (2.0 * ia20[j]);
         coeff2[j] = (d - 2.0) * u0[j] / 2.0;
     }
-    fft.solveInhom(coeff1, coeff2, v0);
+    fft.solveInhom(coeff1, coeff2, v0, Delta);
 
     // Order 1
     vec_real f1(Ntau), u1(Ntau), ia21(Ntau), v1(Ntau);
@@ -224,7 +228,7 @@ void InitialConditionGenerator::computeRightExpansion(
         ) / (2.0 * std::pow(ia20[j], 2));
     }
 
-    fft.solveInhom(coeff1, coeff2, v1);
+    fft.solveInhom(coeff1, coeff2, v1, Delta);
 
     // Order 2
     vec_real f2(Ntau), ia22(Ntau), u2(Ntau), du2(Ntau), v2(Ntau);
@@ -266,7 +270,7 @@ void InitialConditionGenerator::computeRightExpansion(
     // Step 4: Differentiate u2
     vec_complex U2Hat, dU2Hat;
     fft.forwardFFT(u2, U2Hat);
-    fft.differentiate(U2Hat, dU2Hat);
+    fft.differentiate(U2Hat, dU2Hat, Delta);
     fft.inverseFFT(dU2Hat, du2);
 
     // Step 5: Compute v2 via linear inhomogeneous solve
@@ -292,7 +296,7 @@ void InitialConditionGenerator::computeRightExpansion(
     }
 
     // Solve for v2
-    fft.solveInhom(coeff1, coeff2, v2);
+    fft.solveInhom(coeff1, coeff2, v2, Delta);
 
     // Order 3
     vec_real f3(Ntau), ia23(Ntau), u3(Ntau), v3(Ntau);
@@ -379,7 +383,7 @@ void InitialConditionGenerator::computeRightExpansion(
                 + (-1.0 + f1[j]) * v1[j] + v2[j]))) / std::pow(ia20[j], 2);
     }
 
-    fft.solveInhom(coeff1, coeff2, v3);
+    fft.solveInhom(coeff1, coeff2, v3, Delta);
 
     // Construct final fields
 
@@ -450,7 +454,7 @@ void InitialConditionGenerator::unpackSpectralFields(const vec_real& Z,
     fft.doubleModes(EvenF, EvenF);
 
     // Restore high-frequency cosine
-    // EvenF[2*Nnewton/3] = complex_t(EvenF[2*Nnewton/3].real());
+    EvenF[Nnewton/3] = complex_t(Z[2*Nnewton/3+1]) / 2.0;
 
     fft.inverseFFT(Odd1F, Odd1);
     fft.inverseFFT(Odd2F, Odd2);
@@ -461,41 +465,35 @@ void InitialConditionGenerator::unpackSpectralFields(const vec_real& Z,
 void InitialConditionGenerator::FieldsToStateVector(const vec_real& U, const vec_real& V,
     const vec_real& F, vec_complex& Y)
 {
-    SpectralTransformer fieldsFFT(2*Ntau, Delta);
 
-    vec_real packVec(2*Ntau);
-
-    for (size_t j=0; j<Ntau-1; ++j)
+    for (int j = 0; j<Ntau; ++j)
     {
-        packVec[2*j] = U[j];
-        packVec[2*j+1] = V[j] + F[j];
+        Y[j] = complex_t(U[j], V[j] + F[j]);
     }
 
-    fieldsFFT.forwardFFT(packVec, Y);
-    fieldsFFT.halveModes(Y, Y);
+    fft.forwardFFTComplex(Y, Y);
+    fft.halveModes(Y, Y);
 
 }
 
-void InitialConditionGenerator::StateVectorToFields(const vec_complex& Y, vec_real& U, vec_real& V,
-     vec_real& F, vec_real& IA2, vec_real& dU, vec_real& dV, vec_real& dF, real_t X)
+void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U, vec_real& V,
+     vec_real& F, vec_real& IA2, vec_real& dUdt, vec_real& dVdt, vec_real& dFdt, real_t X)
 {
     vec_complex compVec1, compVec2;
-    vec_real realVec1, realVec2;
     Delta = Y[2].real();
+    Y[2] = complex_t(-Y[Y.size()-2].real(), Y[2].imag());
 
-    fft.doubleModes(Y, compVec1);
+    fft.doubleModes(Y, compVec1, Ntau/2);
 
-    compVec1[2] = complex_t(compVec1[Ntau-2].imag(), compVec1[2].imag());
+    fft.differentiate(compVec1, compVec2, Delta);
 
-    fft.differentiate(compVec1, compVec2);
-
-    fft.inverseFFT(compVec1, realVec1);
+    fft.inverseFFTComplex(compVec1, compVec1);
 
     for (int j=0; j<Ntau/2; ++j)
     {
-        U[j] = 0.5 * (realVec1[j+1] - realVec1[j+Ntau/2+1]);
-        V[j] = 0.5 * (realVec1[j] - realVec1[j+Ntau/2]);
-        F[j] = 0.5 * (realVec1[j] + realVec1[j+Ntau/2]);
+        U[j] = 0.5 * (compVec1[j].real() - compVec1[j+Ntau/2].real());
+        V[j] = 0.5 * (compVec1[j].imag() - compVec1[j+Ntau/2].imag());
+        F[j] = 0.5 * (compVec1[j].imag() + compVec1[j+Ntau/2].imag());
     }
 
     // Shifting symmetries
@@ -507,21 +505,21 @@ void InitialConditionGenerator::StateVectorToFields(const vec_complex& Y, vec_re
     }
 
     // Derivatives
-    fft.inverseFFT(compVec2,realVec2);
+    fft.inverseFFTComplex(compVec2,compVec2);
 
     for (int j=0; j<Ntau/2; ++j)
     {
-        dU[j] = 0.5 * (realVec2[j+1] - realVec2[j+Ntau/2+1]);
-        dV[j] = 0.5 * (realVec2[j] - realVec2[j+Ntau/2]);
-        dF[j] = 0.5 * (realVec2[j] + realVec2[j+Ntau/2]);
+        dUdt[j] = 0.5 * (compVec2[j].real() - compVec2[j+Ntau/2].real());
+        dVdt[j] = 0.5 * (compVec2[j].imag() - compVec2[j+Ntau/2].imag());
+        dFdt[j] = 0.5 * (compVec2[j].imag() + compVec2[j+Ntau/2].imag());
     }
 
     // Shifting symmetries
     for (int j=0; j<Ntau/2; ++j)
     {
-        dU[j+Ntau/2] = - dU[j];
-        dV[j+Ntau/2] = - dV[j];
-        dF[j+Ntau/2] = dF[j];
+        dUdt[j+Ntau/2] = - dUdt[j];
+        dVdt[j+Ntau/2] = - dVdt[j];
+        dFdt[j+Ntau/2] = dFdt[j];
     }
 
     //IA2 from constraint
@@ -535,6 +533,34 @@ void InitialConditionGenerator::StateVectorToFields(const vec_complex& Y, vec_re
         Coeff2[j] = Dim - 3.0; 
     }
     
-    fft.solveInhom(Coeff1, Coeff2, IA2);
+    fft.solveInhom(Coeff1, Coeff2, IA2, Delta);
+
+}
+
+void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U, vec_real& V,
+     vec_real& F, real_t X)
+{
+    vec_complex compVec1;
+    Delta = Y[2].real();
+    Y[2] = complex_t(-Y[Y.size()-2].real(), Y[2].imag());
+
+    fft.doubleModes(Y, compVec1, Ntau/2);
+
+    fft.inverseFFTComplex(compVec1, compVec1);
+
+    for (int j=0; j<Ntau/2; ++j)
+    {
+        U[j] = 0.5 * (compVec1[j].real() - compVec1[j+Ntau/2].real());
+        V[j] = 0.5 * (compVec1[j].imag() - compVec1[j+Ntau/2].imag());
+        F[j] = 0.5 * (compVec1[j].imag() + compVec1[j+Ntau/2].imag());
+    }
+
+    // Shifting symmetries
+    for (int j=0; j<Ntau/2; ++j)
+    {
+        U[j+Ntau/2] = - U[j];
+        V[j+Ntau/2] = - V[j];
+        F[j+Ntau/2] = F[j];
+    }
 
 }

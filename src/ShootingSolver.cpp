@@ -7,7 +7,7 @@ ShootingSolver::ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, Initia
 }
 
 void ShootingSolver::shoot(vec_complex& YLeft, vec_complex& YRight, const vec_real& gridX,
-    int iLeft, int iRight, int iMid, vec_real& mismatchOut)
+    int iLeft, int iRight, int iMid, vec_complex& mismatchOut)
 {
 
     integrateToMidpoint(YLeft, gridX, iLeft, iMid, true, YLeft);
@@ -44,16 +44,15 @@ void ShootingSolver::integrateToMidpoint(
 }
 
 void ShootingSolver::computeMismatch(
-    const vec_complex& yLeft, const vec_complex& yRight, vec_real& mismatchOut)
+    const vec_complex& yLeft, const vec_complex& yRight, vec_complex& mismatchOut)
 {
     
     mismatchOut.resize(Ntau);
     for (int i=0; i<Ntau/2; ++i)
     {
-        mismatchOut[i] = yRight[i].real() - yLeft[i].real();
-        mismatchOut[i+1] = yRight[i].imag() - yLeft[i].imag();
+        mismatchOut[i] = yRight[i] - yLeft[i];
     }
 
     // Enforce consistency of Delta value
-    mismatchOut[4] = yLeft[2].real();  // Fortran index y(5)
+    mismatchOut[2] = complex_t(yLeft[2].real(), mismatchOut[2].imag());
 }

@@ -21,11 +21,11 @@ class InitialConditionGenerator
         
         void computeLeftExpansion(
             real_t XLeft, const vec_real& fc, const vec_real& psic,
-            vec_complex& Y, bool PrintDiagnostics);
+            vec_complex& Y, real_t DeltaIn, bool PrintDiagnostics);
 
         void computeRightExpansion(
             real_t XRight, const vec_real& Up, 
-            vec_complex& Y, bool PrintDiagnostics);
+            vec_complex& Y, real_t DeltaIn, bool PrintDiagnostics);
 
         void packSpectralFields(
             const vec_real& Odd1, const vec_real& Odd2, const vec_real& Even,
@@ -37,7 +37,10 @@ class InitialConditionGenerator
         void FieldsToStateVector(const vec_real& U, const vec_real& V,
             const vec_real& F, vec_complex& Y);
 
-        void StateVectorToFields(const vec_complex& Y, vec_real& U, vec_real& V,
-            vec_real& F, vec_real& IA2, vec_real& dU, vec_real& dV, vec_real& dF, real_t X);
+        void StateVectorToFields(vec_complex& Y, vec_real& U, vec_real& V,
+            vec_real& F, vec_real& IA2, vec_real& dUdt, vec_real& dVdt, vec_real& dFdt, real_t X);
+        
+        void StateVectorToFields(vec_complex& Y, vec_real& U, vec_real& V,
+            vec_real& F, real_t X);
 
 };

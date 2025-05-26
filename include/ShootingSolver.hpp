@@ -20,12 +20,12 @@ class ShootingSolver
             int startIdx, int endIdx, bool forward,
             vec_complex& yFinal);
     
-        void computeMismatch(const vec_complex& yLeft, const vec_complex& yRight, vec_real& mismatchOut);
+        void computeMismatch(const vec_complex& yLeft, const vec_complex& yRight, vec_complex& mismatchOut);
             
     public:
         ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, InitialConditionGenerator& initGen_, int maxIts_);
 
         void shoot(vec_complex& YLeft, vec_complex& YRight, const vec_real& gridX,
-                   int iLeft, int iRight, int iMid, vec_real& mismatchOut);
+                   int iLeft, int iRight, int iMid, vec_complex& mismatchOut);
 
 };

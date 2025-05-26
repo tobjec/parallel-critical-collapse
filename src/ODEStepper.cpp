@@ -51,34 +51,48 @@ ODEStepper::ODEStepper(int Ntau_, real_t Dim_, real_t precision_, Scheme method_
         }
     }
 
-void ODEStepper::computeDerivatives(const vec_complex& Y, vec_complex& dY, real_t x)
+void ODEStepper::computeDerivatives(vec_real& Yreal, vec_real& dYreal, real_t x)
 {
-    vec_real U(Ntau), V(Ntau), F(Ntau), IA2(Ntau), dU(Ntau), dV(Ntau), dF(Ntau),
-             dUdx(Ntau), dVdx(Ntau), dFdx(Ntau); 
-    initGen.StateVectorToFields(Y, U, V, F, IA2, dU, dV, dF, x);
+    vec_real U(Ntau), V(Ntau), F(Ntau), IA2(Ntau), dUdt(Ntau), dVdt(Ntau), dFdt(Ntau),
+             dUdx(Ntau), dVdx(Ntau), dFdx(Ntau);
+    
+    vec_complex Y(Ntau/2), dYdx(Ntau);
 
-    for (int j; j<Ntau; ++j)
+    for (int j=0; j<Ntau/2; ++j)
+    {
+        Y[j] = complex_t(Yreal[2*j], Yreal[2*j+1]);
+    }
+
+    initGen.StateVectorToFields(Y, U, V, F, IA2, dUdt, dVdt, dFdt, x);
+
+    for (int j=0; j<Ntau; ++j)
     {
         dUdx[j] = (F[j] * ((Dim - 2.0) * V[j]
                     - (2.0 * (Dim - 3.0) / IA2[j] - (Dim - 2.0)) * U[j])
-                    - 2.0 * x * dU[j]) 
+                    - 2.0 * x * dUdt[j]) 
                   / (2.0 * x * (F[j] + x));
 
         dVdx[j] = (F[j] * ((Dim - 2.0) * U[j]
                     - (2.0 * (Dim - 3.0) / IA2[j] - (Dim - 2.0)) * V[j])
-                    + 2.0 * x * dV[j]) 
+                    + 2.0 * x * dVdt[j]) 
                   / (2.0 * x * (F[j] - x));
 
         dFdx[j] = (Dim - 3.0) * F[j] * (1.0 - IA2[j]) / (IA2[j] * x);
     }
 
-    initGen.FieldsToStateVector(dUdx, dVdx, dFdx, dY);
+    initGen.FieldsToStateVector(dUdx, dVdx, dFdx, dYdx);
 
-    dY[2] = complex_t(0.0, dY[2].imag());
+    dYdx[2] = complex_t(0.0, dYdx[2].imag());
+
+    for (int j=0; j<Ntau/2; ++j)
+    {
+        dYreal[2*j] = dYdx[j].real();
+        dYreal[2*j+1] = dYdx[j].imag();
+    }
 
 }
 
-void ODEStepper::integrate(const vec_complex& Yin, vec_complex& Yout,
+void ODEStepper::integrate(vec_complex& Yin, vec_complex& Yout,
                            real_t Xin, real_t Xout,
                            bool& converged, int& itsReached,
                            int maxIts)
@@ -100,7 +114,7 @@ void ODEStepper::integrate(const vec_complex& Yin, vec_complex& Yout,
 }
 
 // === IRK
-void ODEStepper::stepIRK(const vec_complex& Yin, vec_complex& Yout,
+void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
                          real_t Xin, real_t Xout, int& itsReached,
                          bool& converged, int maxIts)
 {
@@ -109,8 +123,8 @@ void ODEStepper::stepIRK(const vec_complex& Yin, vec_complex& Yout,
 
     vec_real x(stage);
     vec_real y(Ntau);
-    mat_complex f(stage, vec_complex(Ntau, 0.0)), yK1(stage, vec_complex(Ntau, 0.0)),
-             yK2(stage, vec_complex(Ntau, 0.0));
+    mat_real f(stage, vec_real(Ntau, 0.0)), yK1(stage, vec_real(Ntau, 0.0)),
+             yK2(stage, vec_real(Ntau, 0.0));
     
     itsReached = 0;
     converged = false;
@@ -118,8 +132,8 @@ void ODEStepper::stepIRK(const vec_complex& Yin, vec_complex& Yout,
     // Initialization of y
     for (int i=0; i<Ntau/2; ++i)
     {
-        y[i] = Yin[i].real();
-        y[i+1] = Yin[i].imag();
+        y[2*i] = Yin[i].real();
+        y[2*i+1] = Yin[i].imag();
     }
 
     // Collocation points
@@ -149,13 +163,13 @@ void ODEStepper::stepIRK(const vec_complex& Yin, vec_complex& Yout,
         }
 
         // Compute new stage
-        for (int i=0; i<Ntau; ++i)
+        for (int i=0; i<stage; ++i)
         {
-            for (int j=0; j<stage; ++j)
+            for (int j=0; j<Ntau; ++j)
             {
                 for (int k=0; k<stage; ++k)
                 {
-                    yK2[i][j] = yK2[i][j] + dx * a[j][k] * f[i][k];
+                    yK2[i][j] += dx * a[i][k] * f[k][j];
                 }
             }
         }
@@ -165,11 +179,12 @@ void ODEStepper::stepIRK(const vec_complex& Yin, vec_complex& Yout,
         {
             for (int j=0; j<Ntau; ++j)
             {
-                norm2 += std::pow(yK1[i][j].real() - yK2[i][j].real(), 2);
+                norm2 += std::pow(yK1[i][j] - yK2[i][j], 2);
             }
         }
 
         norm2 = std::sqrt(norm2 / (Ntau*stage));
+        
         if (norm2 < precision)
         {
             converged = true;
@@ -181,19 +196,19 @@ void ODEStepper::stepIRK(const vec_complex& Yin, vec_complex& Yout,
     {
         for (int j=0; j<Ntau; ++j)
         {
-            y[j] += dx * b[i] * f[i][j].real();
+            y[j] += dx * b[i] * f[i][j];
         }
     }
     
     // Assigning to final vector
     for (int i=0; i<Ntau/2; ++i)
     {
-        Yout[i] = complex_t(y[i], y[i+1]);
+        Yout[i] = complex_t(y[2*i], y[2*i+1]);
     }
 }
 
 // === RKF45 (adaptive)
-void ODEStepper::stepRKF45(const vec_complex& yin, vec_complex& yout,
+void ODEStepper::stepRKF45(vec_complex& yin, vec_complex& yout,
                            real_t xin, real_t xout,
                            real_t& dxNext, bool& converged, int maxIts)
 {}

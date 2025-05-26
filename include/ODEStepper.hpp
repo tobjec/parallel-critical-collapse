@@ -13,13 +13,13 @@ class ODEStepper
         mat_real a;
         vec_real b, c;
 
-        void computeDerivatives(const vec_complex& Y, vec_complex& dY, real_t x);
+        void computeDerivatives(vec_real& Yreal, vec_real& dYreal, real_t x);
 
-        void stepIRK(const vec_complex& Yin, vec_complex& Yout,
+        void stepIRK(vec_complex& Yin, vec_complex& Yout,
                     real_t Xin, real_t Xout, int& itsReached,
                     bool& converged, int maxIts);
 
-        void stepRKF45(const vec_complex& Yin, vec_complex& Yout,
+        void stepRKF45(vec_complex& Yin, vec_complex& Yout,
                     real_t Xin, real_t Xout,
                     real_t& dxNext, bool& converged, int maxIts);
 
@@ -27,7 +27,7 @@ class ODEStepper
 
         ODEStepper(int numVars, real_t dim, real_t precision, Scheme method, InitialConditionGenerator& initGen);
 
-        void integrate(const vec_complex& Yin, vec_complex& Yout,
+        void integrate(vec_complex& Yin, vec_complex& Yout,
                     real_t Xin, real_t Xout,
                     bool& converged, int& itsReached,
                     int maxIts);

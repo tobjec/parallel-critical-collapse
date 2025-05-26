@@ -51,4 +51,3 @@ using vec_complex = std::vector<complex_t>;
 using mat_real = std::vector<std::vector<real_t>>;
 using mat_complex = std::vector<std::vector<complex_t>>;
 using json = nlohmann::json;
-
