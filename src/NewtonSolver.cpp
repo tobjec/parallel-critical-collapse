@@ -1,7 +1,7 @@
 #include "NewtonSolver.hpp"
 
 NewtonSolver::NewtonSolver(SimulationConfig configIn)
-    : config(configIn), Ntau(configIn.Ntau), Nnewton(3*configIn.Ntau/4), Dim(configIn.Dim),
+    : config(configIn), Ntau(configIn.Ntau), Nnewton(3*configIn.Ntau/4), maxIts(configIn.MaxIterNewton), Dim(configIn.Dim),
       Delta(configIn.Delta), EpsNewton(configIn.EpsNewton), TolNewton(configIn.PrecisionNewton),
       XLeft(configIn.XLeft), XMid(configIn.XMid), XRight(configIn.XRight), NLeft(configIn.NLeft), NRight(configIn.NRight),
       iL(0), iM(configIn.NLeft), iR(configIn.NLeft+configIn.NRight-1), initGen(configIn.Ntau, configIn.Dim, configIn.Delta)
@@ -21,7 +21,7 @@ NewtonSolver::NewtonSolver(SimulationConfig configIn)
                                                configIn.PrecisionIRK, initGen, configIn.MaxIterIRK);
 }
 
-void NewtonSolver::run(int maxIts)
+void NewtonSolver::run()
 {
     real_t err = 1.0;
     real_t fac = 1.0;
@@ -30,7 +30,7 @@ void NewtonSolver::run(int maxIts)
     in0[2*Nnewton/3+2] = Delta;
     generateGrid();
 
-    for (int its = 0; its < maxIts; ++its)
+    for (size_t its=0; its<maxIts; ++its)
     {
         std::cout << "Newton iteration: " << its + 1 << std::endl;
 
@@ -39,7 +39,7 @@ void NewtonSolver::run(int maxIts)
         err = computeL2Norm(out0);
         std::cout << "Mismatch norm: " << err << std::endl;
 
-        if (err < TolNewton)
+        if (err<TolNewton)
         {
             std::cout << "Converged!" << std::endl;
             writeFinalOutput();
@@ -58,8 +58,8 @@ void NewtonSolver::run(int maxIts)
 
         // Damping factor based on mismatch reduction
         fac = std::min(1.0, err / 1e-3);
-        
-        for (int i = 0; i < Nnewton; ++i)
+
+        for (size_t i=0; i<Nnewton; ++i)
         {
             in0[i] += fac * dx[i];
         }
@@ -134,7 +134,7 @@ void NewtonSolver::generateGrid()
 void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput, mat_real& jacobian)
 {
 
-    for (int i = 0; i < Nnewton; ++i)
+    for (size_t i=0; i<Nnewton; ++i)
     {
         vec_real perturbedInput = baseInput;
         perturbedInput[i] += EpsNewton;
@@ -142,7 +142,7 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
         vec_real perturbedOutput(Nnewton);
         shoot(perturbedInput, perturbedOutput);
 
-        for (int j = 0; j < Nnewton; ++j)
+        for (size_t j=0; j<Nnewton; ++j)
         {
             jacobian[j][i] = (perturbedOutput[j] - baseOutput[j]) / EpsNewton;
         }
@@ -151,24 +151,22 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
 
 void NewtonSolver::solveLinearSystem(const mat_real& A_in, vec_real& rhs, vec_real& dx)
 {
-    const int N = static_cast<int>(rhs.size());
-
     // Convert matrix to row-major double* for LAPACKE
-    std::vector<real_t> A_flat(N * N);
-    for (int i = 0; i < N; ++i)
+    std::vector<real_t> A_flat(Nnewton * Nnewton);
+    for (size_t i=0; i<Nnewton; ++i)
     {
-        std::memcpy(&A_flat[i * N], A_in[i].data(), N * sizeof(real_t));
+        std::memcpy(&A_flat[i * Nnewton], A_in[i].data(), Nnewton * sizeof(real_t));
     }
 
-    std::vector<lapack_int> ipiv(N);
+    std::vector<lapack_int> ipiv(Nnewton);
 
-    lapack_int info = LAPACKE_dgesv(LAPACK_ROW_MAJOR, N, 1, A_flat.data(), N, ipiv.data(), rhs.data(), 1);
+    lapack_int info = LAPACKE_dgesv(LAPACK_ROW_MAJOR, static_cast<int32_t>(Nnewton), 1, A_flat.data(),
+                                    static_cast<int32_t>(Nnewton), ipiv.data(), rhs.data(), 1);
     if (info != 0)
     {
         std::cerr << "ERROR: LAPACKE_dgesv failed with error code " << info << std::endl;
         std::exit(EXIT_FAILURE);
     }
-
     // Solution vector
     dx = rhs;
 }

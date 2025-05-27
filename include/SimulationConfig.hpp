@@ -3,7 +3,7 @@
 
 struct SimulationConfig
 {
-    int Ntau;
+    size_t Ntau;
     real_t Dim;
     real_t XLeft, XMid, XRight;
     real_t EpsNewton, PrecisionNewton, SlowError;

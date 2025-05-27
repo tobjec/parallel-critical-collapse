@@ -145,7 +145,7 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
     }
 
     // Fixed-point iteration
-    for (int its = 0; its < maxIts; ++its)
+    for (int its=0; its<maxIts; ++its)
     {
         yK1 = yK2;
 
@@ -183,6 +183,8 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
             converged = true;
             break;
         }
+        
+        ++itsReached;
     }
 
     for (int i=0; i<stage; ++i)

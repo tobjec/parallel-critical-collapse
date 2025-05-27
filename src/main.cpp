@@ -13,7 +13,7 @@ int main()
         NewtonSolver solver(config);
 
         // Run solver
-        solver.run(config.MaxIterNewton);
+        solver.run();
 
         std::cout << "Simulation finished successfully.\n";
     }

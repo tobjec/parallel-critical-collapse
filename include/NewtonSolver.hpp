@@ -10,7 +10,7 @@ class NewtonSolver
 {
     private:
         SimulationConfig config;
-        int Ntau, Nnewton;
+        size_t Ntau, Nnewton, maxIts;
         real_t Dim, Delta;
         real_t EpsNewton, TolNewton;
         real_t XLeft, XMid, XRight;
@@ -33,7 +33,7 @@ class NewtonSolver
     public:
         NewtonSolver(SimulationConfig configIn);
 
-        void run(int maxIts);
+        void run();
         void writeFinalOutput();
 
 };

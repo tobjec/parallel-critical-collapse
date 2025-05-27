@@ -63,11 +63,11 @@ int main()
     fft.forwardFFT(in_real, out_real);
     fft.differentiate(out_real, diff_real);
     fft.lamIntegrate(diff_real, int_real, complex_t(0.0));
-    fft.forwardFFTComplex(in_comp, out_comp);
+    fft.forwardFFT(in_comp, out_comp);
     fft.inverseFFT(out_real, ref_in_real);
     fft.inverseFFT(diff_real, ref_diff_out);
     fft.inverseFFT(int_real, ref_int);
-    fft.inverseFFTComplex(out_comp, ref_in_comp);
+    fft.inverseFFT(out_comp, ref_in_comp);
 
     for (size_t i=0; i<out_comp.size(); ++i)
     {
