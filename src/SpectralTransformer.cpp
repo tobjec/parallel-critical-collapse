@@ -130,8 +130,7 @@ void SpectralTransformer::lamIntegrate(const vec_complex& fk, vec_complex& out, 
         }
         else
         {
-            // maybe a complex number is needed here
-            out[size/2] = lambda / (std::pow(lambda,2) - std::pow(k0c*size/2.0, 2)) * fk[size/2]; 
+            out[size/2] = lambda / (std::pow(lambda,2) + std::pow(k0c*size/2.0, 2)) * fk[size/2]; 
         }   
     }
 }

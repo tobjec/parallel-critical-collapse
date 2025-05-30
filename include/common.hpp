@@ -18,6 +18,7 @@
 #include <fstream>
 #include <filesystem>
 #include <cassert>
+#include <thread>
 
 // ========== Third-Party Libraries ==========
 #include <nlohmann/json.hpp> // JSON for Modern C++
@@ -33,15 +34,8 @@
 #include <omp.h>
 #endif
 
-// ========== MKL (Optional LAPACK backend) ==========
-#ifdef USE_MKL
-#include <mkl.h>
-#endif
-
-// ========== Project Headers ================
-
 // ========== ENUM CLASSES ==========
-enum class Scheme { IRK2, IRK3 };
+enum class Scheme { IRK1, IRK2, IRK3 };
 
 // ========== Aliases ===============
 using real_t = double;
@@ -51,3 +45,14 @@ using vec_complex = std::vector<complex_t>;
 using mat_real = std::vector<std::vector<real_t>>;
 using mat_complex = std::vector<std::vector<complex_t>>;
 using json = nlohmann::json;
+
+
+// ============ Common Functions =======
+
+bool almost_equal(complex_t a, complex_t b, double tol = 1e-15);
+
+bool almost_equal(double a, double b, double tol = 1e-15);
+
+void print_vec(const vec_real& vec);
+
+void print_vec(const vec_complex& vec);

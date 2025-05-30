@@ -3,7 +3,7 @@
 ShootingSolver::ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, InitialConditionGenerator& initGen_, int maxIts_)
     : Ntau(Ntau_), Dim(Dim_), Precision(precision_), initGen(initGen_), maxIts(maxIts_)
 {
-    stepper = std::make_unique<ODEStepper>(Ntau_, Dim_, precision_, Scheme::IRK3, initGen);
+    stepper = std::make_unique<ODEStepper>(Ntau_, Dim_, precision_, Scheme::IRK1, initGen);
 }
 
 void ShootingSolver::shoot(vec_complex& YLeft, vec_complex& YRight, const vec_real& gridX,

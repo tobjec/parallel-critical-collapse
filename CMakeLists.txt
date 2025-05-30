@@ -21,7 +21,7 @@ target_compile_features(critical_collapse_flags INTERFACE cxx_std_17)
 set(gcc_like_cxx "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang,GNU,LCC>")
 set(msvc_cxx "$<COMPILE_LANG_AND_ID:CXX,MSVC>")
 target_compile_options(critical_collapse_flags INTERFACE
-  "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-Wall;-Wpedantic;-Wconversion;-Wextra;-Wshadow;-Wformat=2;-Wunused>>"
+  "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-Wall;-Wpedantic;-Wextra;-Wshadow;-Wformat=2;-Wunused>>"
   "$<${msvc_cxx}:$<BUILD_INTERFACE:-W3>>"
 )
 
@@ -35,15 +35,15 @@ add_library(ODEStepper                ${PROJECT_SOURCE_DIR}/src/ODEStepper.cpp)
 add_library(OutputWriter              ${PROJECT_SOURCE_DIR}/src/OutputWriter.cpp)
 add_library(ShootingSolver            ${PROJECT_SOURCE_DIR}/src/ShootingSolver.cpp)
 add_library(SpectralTransformer       ${PROJECT_SOURCE_DIR}/src/SpectralTransformer.cpp)
+add_library(Common                    ${PROJECT_SOURCE_DIR}/src/common.cpp)
 
 # ----  declare intra-project links  ----
 target_link_libraries(ODEStepper       PUBLIC InitialConditionGenerator)
-target_link_libraries(NewtonSolver     PUBLIC InitialConditionGenerator ODEStepper)
+target_link_libraries(NewtonSolver     PUBLIC InitialConditionGenerator ODEStepper Common)
 target_link_libraries(ShootingSolver   PUBLIC InitialConditionGenerator ODEStepper)
 
-
 # Apply common dependencies to all components
-foreach(lib IN ITEMS InitialConditionGenerator NewtonSolver ODEStepper OutputWriter ShootingSolver SpectralTransformer)
+foreach(lib IN ITEMS InitialConditionGenerator NewtonSolver ODEStepper OutputWriter ShootingSolver SpectralTransformer Common)
     target_link_libraries(${lib}
         PRIVATE
             PkgConfig::FFTW
@@ -64,6 +64,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     OutputWriter
     ShootingSolver
     SpectralTransformer
+    Common
     PkgConfig::FFTW
     PkgConfig::LAPACKE
     OpenMP::OpenMP_CXX

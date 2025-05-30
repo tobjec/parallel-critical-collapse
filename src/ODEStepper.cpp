@@ -7,9 +7,21 @@ ODEStepper::ODEStepper(int Ntau_, real_t Dim_, real_t precision_, Scheme method_
 
         switch (scheme)
         {
+            case Scheme::IRK1:
+                stage = 1;
+                a.assign(stage, vec_real(stage));
+                b.resize(stage);
+                c.resize(stage);
+
+                a[0][0] = 0.5;
+                b[0] = 1.0;
+                c[0] = 0.5;
+                
+                break;
+
             case Scheme::IRK2:
                 stage = 2;
-                a.assign(stage, vec_real(3));
+                a.assign(stage, vec_real(stage));
                 b.resize(stage);
                 c.resize(stage);
 
@@ -25,16 +37,16 @@ ODEStepper::ODEStepper(int Ntau_, real_t Dim_, real_t precision_, Scheme method_
 
             case Scheme::IRK3:
                 stage = 3;
-                a.assign(stage, vec_real(3));
+                a.assign(stage, vec_real(stage));
                 b.resize(stage);
                 c.resize(stage);
 
                 a[0][0] = 5.0 / 36.0;
-                a[0][1] = 2.0 / 9.0 - 1 / std::sqrt(15.0);
+                a[0][1] = 2.0 / 9.0 - 1.0 / std::sqrt(15.0);
                 a[0][2] = 5.0 / 36.0 - 0.5 / std::sqrt(15.0);
                 a[1][0] = 5.0 / 36.0 + std::sqrt(15.0) / 24.0;
                 a[1][1] = 2.0 / 9.0; 
-                a[1][2] = 5.0 / 36.0 + std::sqrt(15.0) / 24.0;
+                a[1][2] = 5.0 / 36.0 - std::sqrt(15.0) / 24.0;
                 a[2][0] = 5.0 / 36.0 + 0.5 / std::sqrt(15.0);
                 a[2][1] = 2.0 / 9.0 + 1.0 / std::sqrt(15.0);
                 a[2][2] = 5.0 / 36.0;
@@ -96,6 +108,9 @@ void ODEStepper::integrate(vec_complex& Yin, vec_complex& Yout,
 {
     switch (scheme)
     {
+        case Scheme::IRK1:
+            stepIRK(Yin, Yout, Xin, Xout, itsReached, converged, maxIts);
+            break;
         case Scheme::IRK2:
             stepIRK(Yin, Yout, Xin, Xout, itsReached, converged, maxIts);
             break;
@@ -116,8 +131,8 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
 
     vec_real x(stage);
     vec_real y(Ntau);
-    mat_real f(stage, vec_real(Ntau, 0.0)), yK1(stage, vec_real(Ntau, 0.0)),
-             yK2(stage, vec_real(Ntau, 0.0));
+    mat_real f(stage, vec_real(Ntau)), yK1(stage, vec_real(Ntau)),
+             yK2(stage, vec_real(Ntau));
     
     itsReached = 0;
     converged = false;
@@ -147,6 +162,7 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
     // Fixed-point iteration
     for (int its=0; its<maxIts; ++its)
     {
+        ++itsReached;
         yK1 = yK2;
 
         // Calculation of derivatives
@@ -160,10 +176,12 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
         {
             for (int j=0; j<Ntau; ++j)
             {
+                real_t tmp = y[j];
                 for (int k=0; k<stage; ++k)
                 {
-                    yK2[i][j] += dx * a[i][k] * f[k][j];
+                    tmp += dx * a[i][k] * f[k][j];
                 }
+                yK2[i][j] = tmp;
             }
         }
 
@@ -184,7 +202,6 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
             break;
         }
         
-        ++itsReached;
     }
 
     for (int i=0; i<stage; ++i)

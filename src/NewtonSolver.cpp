@@ -2,7 +2,7 @@
 
 NewtonSolver::NewtonSolver(SimulationConfig configIn)
     : config(configIn), Ntau(configIn.Ntau), Nnewton(3*configIn.Ntau/4), maxIts(configIn.MaxIterNewton), Dim(configIn.Dim),
-      Delta(configIn.Delta), EpsNewton(configIn.EpsNewton), TolNewton(configIn.PrecisionNewton),
+      Delta(configIn.Delta), slowErr(configIn.SlowError), EpsNewton(configIn.EpsNewton), TolNewton(configIn.PrecisionNewton),
       XLeft(configIn.XLeft), XMid(configIn.XMid), XRight(configIn.XRight), NLeft(configIn.NLeft), NRight(configIn.NRight),
       iL(0), iM(configIn.NLeft), iR(configIn.NLeft+configIn.NRight-1), initGen(configIn.Ntau, configIn.Dim, configIn.Delta)
 {
@@ -57,7 +57,7 @@ void NewtonSolver::run()
         solveLinearSystem(J, rhs, dx);
 
         // Damping factor based on mismatch reduction
-        fac = std::min(1.0, err / 1e-3);
+        fac = std::min(1.0, slowErr / err);
 
         for (size_t i=0; i<Nnewton; ++i)
         {
@@ -77,6 +77,8 @@ void NewtonSolver::shoot(vec_real& inputVec, vec_real& outputVec)
     inputVec[2*Nnewton/3+2] = 0.0;
 
     initGen.unpackSpectralFields(inputVec, Up, psic, fc);
+
+    inputVec[2*Nnewton/3+2] = Delta;
 
     // Initialize input for shooting
     initializeInput();
@@ -134,8 +136,12 @@ void NewtonSolver::generateGrid()
 void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput, mat_real& jacobian)
 {
 
+    std::cout << "Starting to assemble Jacobian: " << std::endl;
+
     for (size_t i=0; i<Nnewton; ++i)
     {
+        auto toc = std::chrono::high_resolution_clock::now();
+
         vec_real perturbedInput = baseInput;
         perturbedInput[i] += EpsNewton;
 
@@ -146,13 +152,19 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
         {
             jacobian[j][i] = (perturbedOutput[j] - baseOutput[j]) / EpsNewton;
         }
+
+        auto tic = std::chrono::high_resolution_clock::now();
+
+        std::cout << "Varying parameter: " << i+1 << "/" << Nnewton;
+        std::cout << " in " << static_cast<real_t>((tic-toc).count()) / 1e9;
+        std::cout << " s." << std::endl;
     }
 }
 
 void NewtonSolver::solveLinearSystem(const mat_real& A_in, vec_real& rhs, vec_real& dx)
 {
     // Convert matrix to row-major double* for LAPACKE
-    std::vector<real_t> A_flat(Nnewton * Nnewton);
+    vec_real A_flat(Nnewton * Nnewton);
     for (size_t i=0; i<Nnewton; ++i)
     {
         std::memcpy(&A_flat[i * Nnewton], A_in[i].data(), Nnewton * sizeof(real_t));
