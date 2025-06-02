@@ -22,7 +22,6 @@ SpectralTransformer::SpectralTransformer(size_t N_, real_t period_)
 
     #endif
 
-    #endif
 }
 
 SpectralTransformer::~SpectralTransformer()
@@ -176,12 +175,16 @@ void SpectralTransformer::halveModes(const vec_complex& in, vec_complex& out)
 
     vec_complex tmp(N_out);
 
+    vec_complex tmp(N_out);
+
     for (size_t k=0; k<N_out/2; ++k)
     {
         tmp[k] = in[k];
         tmp[k] = in[k];
+        tmp[k] = in[k];
     }
 
+    tmp[N_out/2] = in[N_out/2] + in[3*N_out/2];
     tmp[N_out/2] = in[N_out/2] + in[3*N_out/2];
     tmp[N_out/2] = in[N_out/2] + in[3*N_out/2];
 
@@ -189,8 +192,10 @@ void SpectralTransformer::halveModes(const vec_complex& in, vec_complex& out)
     {
         tmp[k] = in[N_out+k];
         tmp[k] = in[N_out+k];
+        tmp[k] = in[N_out+k];
     }
 
+    out.swap(tmp);
     out.swap(tmp);
     out.swap(tmp);
     
