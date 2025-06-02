@@ -100,6 +100,47 @@ void NewtonSolver::initializeInput()
     initGen.computeRightExpansion(XRight, Up, YRight, Delta, false);
 }
 
+#ifdef USE_OPENMP
+void NewtonSolver::shoot(vec_real& inputVec, vec_real& outputVec, ShootingSolver& shooter_local,
+                   InitialConditionGenerator& initGen_local, vec_complex& YLeft_local, vec_complex& YRight_local,
+                   vec_complex& mismatchOut_local)
+{
+    vec_real U(Ntau), V(Ntau), F(Ntau), Up_local(Ntau), psic_local(Ntau), fc_local(Ntau);
+    real_t Delta_local {0};
+
+    Delta_local = inputVec[2*Nnewton/3+2];
+    inputVec[2*Nnewton/3+2] = 0.0;
+
+    initGen_local.unpackSpectralFields(inputVec, Up_local, psic_local, fc_local);
+
+    inputVec[2*Nnewton/3+2] = Delta_local;
+
+    // Initialize input for shooting
+    initializeInput(initGen_local, YLeft_local, YRight_local, Up_local, psic_local, fc_local, Delta_local);
+
+    // Shooting from left and right side
+    shooter_local.shoot(YLeft_local, YRight_local, XGrid, iL, iR, iM, mismatchOut_local);
+    
+    // Packing state vector to fields
+    initGen_local.StateVectorToFields(mismatchOut_local, U, V, F);
+    
+    // Packing resulting fields to out vector
+    initGen_local.packSpectralFields(U, V, F, outputVec);
+
+}
+
+void NewtonSolver::initializeInput(InitialConditionGenerator& initGen_local, 
+                                   vec_complex& YLeft_local, vec_complex& YRight_local,
+                                   vec_real& Up_local, vec_real& psic_local, vec_real& fc_local,
+                                   real_t Delta_local)
+{
+    initGen_local.computeLeftExpansion(XLeft, fc_local, psic_local, YLeft_local, Delta_local, false);
+    initGen_local.computeRightExpansion(XRight, Up_local, YRight_local, Delta_local, false);
+}
+
+#endif
+
+
 void NewtonSolver::generateGrid()
 {
     if (config.UseLogGrid)
@@ -136,7 +177,44 @@ void NewtonSolver::generateGrid()
 void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput, mat_real& jacobian)
 {
 
+    #ifdef USE_OPENMP
     std::cout << "Starting to assemble Jacobian: " << std::endl;
+
+    #pragma omp parallel
+    {
+        vec_complex YLeft_local(Ntau), YRight_local(Ntau), mismatchOut_local(Ntau);
+        InitialConditionGenerator initGen_local(Ntau, Dim, Delta);
+        ShootingSolver shooter_local(Ntau, Dim, config.PrecisionIRK, initGen_local, config.MaxIterIRK);
+
+        auto toc = std::chrono::high_resolution_clock::now();
+
+        #pragma omp for schedule(static,8)
+        for (size_t i=0; i<Nnewton; ++i)
+        {
+            vec_real perturbedInput = baseInput;
+            perturbedInput[i] += EpsNewton;
+
+            vec_real perturbedOutput(Nnewton);
+            shoot(perturbedInput, perturbedOutput, shooter_local, initGen_local, YLeft_local, YRight_local, mismatchOut_local);
+
+            for (size_t j=0; j<Nnewton; ++j)
+            {
+                jacobian[j][i] = (perturbedOutput[j] - baseOutput[j]) / EpsNewton;
+            }
+        }
+
+        auto tic = std::chrono::high_resolution_clock::now();
+        if (omp_get_thread_num() == 0)
+        {
+            std::cout << "Time for Newton Iteration: " << static_cast<real_t>((tic-toc).count()) / 1e9;
+            std::cout << " s." << std::endl; 
+        }
+
+    }
+    #else
+    std::cout << "Starting to assemble Jacobian: " << std::endl;
+
+    auto toc_outer = std::chrono::high_resolution_clock::now();
 
     for (size_t i=0; i<Nnewton; ++i)
     {
@@ -159,6 +237,13 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
         std::cout << " in " << static_cast<real_t>((tic-toc).count()) / 1e9;
         std::cout << " s." << std::endl;
     }
+
+    auto tic_outer = std::chrono::high_resolution_clock::now();
+
+    std::cout << "Time for Newton Iteration: " << static_cast<real_t>((tic_outer-toc_outer).count()) / 1e9;
+    std::cout << " s." << std::endl;
+
+    #endif
 }
 
 void NewtonSolver::solveLinearSystem(const mat_real& A_in, vec_real& rhs, vec_real& dx)

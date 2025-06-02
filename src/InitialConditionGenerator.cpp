@@ -473,7 +473,7 @@ void InitialConditionGenerator::unpackSpectralFields(const vec_real& Z,
 void InitialConditionGenerator::FieldsToStateVector(const vec_real& U, const vec_real& V,
     const vec_real& F, vec_complex& Y)
 {
-
+    Y.resize(Ntau);
     for (size_t j=0; j<Ntau; ++j)
     {
         Y[j] = complex_t(U[j], V[j] + F[j]);

@@ -7,9 +7,9 @@ class SpectralTransformer
         size_t N;                          // Number of real-space grid points
         real_t period;                  // Period (Delta)
         real_t k0;
-        fftw_plan forward_plan;
-        fftw_plan backward_plan;
-        fftw_complex *forward_data, *backward_data;
+        fftw_plan forward_plan {nullptr};
+        fftw_plan backward_plan {nullptr};
+        fftw_complex *forward_data {nullptr}, *backward_data {nullptr};
 
     public:
         explicit SpectralTransformer(size_t N, real_t period);

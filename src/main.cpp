@@ -7,7 +7,7 @@ int main()
     try
     {
         // Load configuration
-        SimulationConfig config = SimulationConfig::loadFromJson("../data/simulation.json");
+        SimulationConfig config = SimulationConfig::loadFromJson("/home/tjechtl/Documents/Education/TUW/Master_Thesis/parallel-critical-collapse/data/simulation.json");
 
         // Instantiate Newton solver with essential parameters
         NewtonSolver solver(config);

@@ -7,8 +7,20 @@ SpectralTransformer::SpectralTransformer(size_t N_, real_t period_)
     backward_data = fftw_alloc_complex(N_);
 
     // Changing FFT forward and backward flag due to DFT definition of FFTW3 (-exp(...) vs. exp(...))
+    #ifdef USE_OPENMP
+
+    #pragma omp critical
+    {
+        forward_plan  = fftw_plan_dft_1d(static_cast<int>(N_), forward_data, backward_data, FFTW_BACKWARD, FFTW_MEASURE);
+        backward_plan = fftw_plan_dft_1d(static_cast<int>(N_), backward_data, forward_data, FFTW_FORWARD, FFTW_MEASURE);
+    }
+    
+    #else
+
     forward_plan  = fftw_plan_dft_1d(static_cast<int>(N_), forward_data, backward_data, FFTW_BACKWARD, FFTW_MEASURE);
     backward_plan = fftw_plan_dft_1d(static_cast<int>(N_), backward_data, forward_data, FFTW_FORWARD, FFTW_MEASURE);
+
+    #endif
 }
 
 SpectralTransformer::~SpectralTransformer()
@@ -158,19 +170,21 @@ void SpectralTransformer::halveModes(const vec_complex& in, vec_complex& out)
     size_t N_in = in.size();
     size_t N_out = N_in/2;
 
+    vec_complex tmp(N_out);
+
     for (size_t k=0; k<N_out/2; ++k)
     {
-        out[k] = in[k];
+        tmp[k] = in[k];
     }
 
-    out[N_out/2] = in[N_out/2] + in[3*N_out/2];
+    tmp[N_out/2] = in[N_out/2] + in[3*N_out/2];
 
     for (size_t k=N_out/2+1; k<N_out; ++k)
     {
-        out[k] = in[N_out+k];
+        tmp[k] = in[N_out+k];
     }
 
-    out.resize(N_out);
+    out.swap(tmp);
     
 }
 

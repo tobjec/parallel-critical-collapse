@@ -30,7 +30,16 @@
 #include <fftw3.h>
 
 // ========== Parallelism ==========
-#ifdef _OPENMP
+#ifdef USE_OPENMP
+#include <omp.h>
+#endif
+
+#ifdef USE_MPI
+#include <mpi.h>
+#endif
+
+#if defined(USE_MPI) && defined(USE_OPENMP)
+#include <mpi.h>
 #include <omp.h>
 #endif
 

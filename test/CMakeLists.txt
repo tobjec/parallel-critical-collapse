@@ -1,34 +1,49 @@
-add_executable(test_fft test_fft.cpp)
-add_executable(test_lapack test_lapack.cpp)
-add_executable(test_init_gen test_init_gen.cpp)
+# ────────────────────────────────────────────────────────────────
+# 1.  Decide which back-end library the tests will link against
+#     (serial → OpenMP → MPI → hybrid → CUDA, in that order)
+# ────────────────────────────────────────────────────────────────
+set(TEST_BACKEND_LIB "")
+foreach(cand serial openmp mpi hybrid cuda)
+  if(TARGET critical_collapse_${cand})
+    set(TEST_BACKEND_LIB critical_collapse_${cand})
+    break()
+  endif()
+endforeach()
 
-target_link_libraries(test_fft PRIVATE
-    SpectralTransformer
-    Common
-    OpenMP::OpenMP_CXX
-    critical_collapse_flags
-)
+if(NOT TEST_BACKEND_LIB)
+  message(FATAL_ERROR
+          "No critical-collapse variant library was built, "
+          "so the tests cannot be linked.")
+endif()
+message(STATUS "Tests will link against '${TEST_BACKEND_LIB}'")
 
-target_link_libraries(test_lapack PRIVATE
-    PkgConfig::LAPACKE
-    Common
-    OpenMP::OpenMP_CXX
-    critical_collapse_flags
-)
+# ────────────────────────────────────────────────────────────────
+# 2.  Helper for the repetitive boiler-plate
+# ────────────────────────────────────────────────────────────────
+function(make_test exe src)
+  add_executable(${exe} ${src})
 
-target_link_libraries(test_init_gen PRIVATE 
-    SpectralTransformer
-    Common
-    InitialConditionGenerator
-    OpenMP::OpenMP_CXX
-    critical_collapse_flags
+  # back-end (serial / OpenMP / …) – brings in all solver objects
+  target_link_libraries(${exe} PRIVATE ${TEST_BACKEND_LIB})
 
-)
+  # external math libraries that the individual test uses
+  if(${exe} STREQUAL test_fft)
+    target_link_libraries(${exe} PRIVATE PkgConfig::FFTW)
+  elseif(${exe} STREQUAL test_lapack)
+    target_link_libraries(${exe} PRIVATE PkgConfig::LAPACKE)
+  endif()
 
-target_include_directories(test_fft PRIVATE ${PROJECT_SOURCE_DIR}/include)
-target_include_directories(test_lapack PRIVATE ${PROJECT_SOURCE_DIR}/include)
-target_include_directories(test_init_gen PRIVATE ${PROJECT_SOURCE_DIR}/include)
+  # common compile flags, headers, etc.
+  target_link_libraries(${exe} PRIVATE critical_collapse_flags)
+  target_include_directories(${exe} PRIVATE ${PROJECT_SOURCE_DIR}/include)
 
-add_test(NAME SpectralTransformerTest COMMAND test_fft)
-add_test(NAME LapackeSolverTest COMMAND test_lapack)
-add_test(NAME InitGenTest COMMAND test_init_gen)
+  # register the test with CTest
+  add_test(NAME ${exe} COMMAND ${exe})
+endfunction()
+
+# ────────────────────────────────────────────────────────────────
+# 3.  Concrete test targets
+# ────────────────────────────────────────────────────────────────
+make_test(test_fft       test_fft.cpp)
+make_test(test_lapack    test_lapack.cpp)
+make_test(test_init_gen  test_init_gen.cpp)
