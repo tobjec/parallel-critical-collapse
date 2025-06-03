@@ -34,13 +34,26 @@ class NewtonSolver
                    vec_complex& mismatchOut_local);
         #endif
 
+        #ifdef USE_MPI
+        int size, rank;
+        MPI_Datatype mpi_contiguous_t, mpi_column_t, col;
+        void assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput,
+                              vec_real& jacobian);
+        void solveLinearSystem(vec_real& A, vec_real& rhs, vec_real& dx);
+        #else
         void assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput,
                               mat_real& jacobian);
         void solveLinearSystem(const mat_real& A, vec_real& rhs, vec_real& dx);
+        #endif
+        
         real_t computeL2Norm(const vec_real& vc);
 
     public:
         NewtonSolver(SimulationConfig configIn);
+
+        #ifdef USE_MPI
+        ~NewtonSolver();
+        #endif
 
         void run();
         void writeFinalOutput();

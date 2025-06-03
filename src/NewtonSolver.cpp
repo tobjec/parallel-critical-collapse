@@ -19,8 +19,97 @@ NewtonSolver::NewtonSolver(SimulationConfig configIn)
 
     shooter = std::make_unique<ShootingSolver>(configIn.Ntau, configIn.Dim,
                                                configIn.PrecisionIRK, initGen, configIn.MaxIterIRK);
+
+    #ifdef USE_MPI
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    MPI_Type_contiguous(Nnewton, MPI_DOUBLE, &mpi_contiguous_t);
+    MPI_Type_vector(Nnewton, 1, Nnewton, MPI_DOUBLE, &col);
+    MPI_Type_commit(&col);
+    MPI_Type_create_resized(col, 0, sizeof(double), &mpi_column_t);
+    MPI_Type_commit(&mpi_contiguous_t);
+    MPI_Type_commit(&mpi_column_t);
+    MPI_Type_free(&col);
+    #endif
 }
 
+#ifdef USE_MPI
+
+NewtonSolver::~NewtonSolver()
+{
+    MPI_Type_free(&mpi_contiguous_t);
+    MPI_Type_free(&mpi_column_t);
+}
+
+void NewtonSolver::run()
+{
+    real_t err = 1.0;
+    real_t fac = 1.0;
+
+    initGen.packSpectralFields(Up, psic, fc, in0);
+    in0[2*Nnewton/3+2] = Delta;
+    generateGrid();
+
+    for (size_t its=0; its<maxIts; ++its)
+    {
+        if (rank==0)
+        {
+            std::cout << "Newton iteration: " << its + 1 << std::endl;
+
+            shoot(in0, out0);
+
+            err = computeL2Norm(out0);
+            std::cout << "Mismatch norm: " << err << std::endl;
+
+            if (err<TolNewton)
+            {
+                std::cout << "Converged!" << std::endl;
+                writeFinalOutput();
+            }
+
+        }
+
+        MPI_Bcast(&err, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+        if (err<TolNewton)
+        {
+            return;
+        }
+        else
+        {
+            MPI_Bcast(in0.data(), 1, mpi_contiguous_t, 0, MPI_COMM_WORLD);
+            MPI_Bcast(out0.data(), 1, mpi_contiguous_t, 0, MPI_COMM_WORLD);
+        }
+
+        vec_real J(Nnewton*Nnewton);
+        assembleJacobian(in0, out0, J);
+
+        if (rank==0)
+        {
+            // Solving J dx = -out0
+            vec_real dx(Nnewton);
+            vec_real rhs = out0;
+            std::for_each(rhs.begin(), rhs.end(), [](auto& ele){ele*=-1.0;});
+
+            solveLinearSystem(J, rhs, dx);
+
+            // Damping factor based on mismatch reduction
+            fac = std::min(1.0, slowErr / err);
+
+            for (size_t i=0; i<Nnewton; ++i)
+            {
+                in0[i] += fac * dx[i];
+            }
+        }
+        
+    }
+
+    std::cerr << "Newton method did not converge in " << maxIts << " iterations." << std::endl;
+    std::exit(EXIT_FAILURE);
+}
+
+#else
 void NewtonSolver::run()
 {
     real_t err = 1.0;
@@ -68,6 +157,8 @@ void NewtonSolver::run()
     std::cerr << "Newton method did not converge in " << maxIts << " iterations." << std::endl;
     std::exit(EXIT_FAILURE);
 }
+
+#endif
 
 void NewtonSolver::shoot(vec_real& inputVec, vec_real& outputVec)
 {
@@ -140,7 +231,6 @@ void NewtonSolver::initializeInput(InitialConditionGenerator& initGen_local,
 
 #endif
 
-
 void NewtonSolver::generateGrid()
 {
     if (config.UseLogGrid)
@@ -174,10 +264,79 @@ void NewtonSolver::generateGrid()
 
 }
 
+#ifdef USE_MPI
+void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput, vec_real& jacobian)
+{
+    if (rank==0)
+    {
+        std::cout << "Starting to assemble Jacobian: " << std::endl;
+    }
+    
+    auto toc_outer = std::chrono::high_resolution_clock::now();
+
+    std::vector<int> indices;
+
+    for (size_t i=rank; i<Nnewton; i+=size)
+    {
+        auto toc = std::chrono::high_resolution_clock::now();
+
+        indices.push_back(i);
+        vec_real perturbedInput = baseInput;
+        perturbedInput[i] += EpsNewton;
+
+        vec_real perturbedOutput(Nnewton);
+        shoot(perturbedInput, perturbedOutput);
+
+        for (size_t j=0; j<Nnewton; ++j)
+        {
+            jacobian[j*Nnewton+i] = (perturbedOutput[j] - baseOutput[j]) / EpsNewton;
+        }
+       
+        auto tic = std::chrono::high_resolution_clock::now();
+
+        std::cout << "Varying parameter: " << i+1 << "/" << Nnewton;
+        std::cout << " by rank " << rank;
+        std::cout << " in " << static_cast<real_t>((tic-toc).count()) / 1e9;
+        std::cout << " s." << std::endl;
+    }
+
+    if (rank!=0)
+    {
+        for (size_t i=0; i<indices.size(); ++i)
+        {
+            size_t idx = indices[i];
+            MPI_Send(&jacobian[idx], 1, mpi_column_t, 0, static_cast<int>(idx), MPI_COMM_WORLD);
+        }
+    }
+    else
+    {
+        for (size_t i=0; i<Nnewton; ++i)
+        {
+            if (i%size!=0)
+            {
+                MPI_Recv(&jacobian[i], 1, mpi_column_t, MPI_ANY_SOURCE, static_cast<int>(i), MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            }
+        }
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    auto tic_outer = std::chrono::high_resolution_clock::now();
+
+    if (rank==0)
+    {
+        std::cout << "Time for Newton Iteration: " << static_cast<real_t>((tic_outer-toc_outer).count()) / 1e9;
+        std::cout << " s." << std::endl;
+    }
+    
+}
+
+#else
+
 void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput, mat_real& jacobian)
 {
 
-    #ifdef USE_OPENMP
+    #if defined(USE_OPENMP)
     std::cout << "Starting to assemble Jacobian: " << std::endl;
 
     #pragma omp parallel
@@ -211,6 +370,7 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
         }
 
     }
+
     #else
     std::cout << "Starting to assemble Jacobian: " << std::endl;
 
@@ -245,7 +405,26 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
 
     #endif
 }
+#endif
 
+
+#ifdef USE_MPI
+void NewtonSolver::solveLinearSystem(vec_real& A_in, vec_real& rhs, vec_real& dx)
+{
+    std::vector<lapack_int> ipiv(Nnewton);
+
+    lapack_int info = LAPACKE_dgesv(LAPACK_ROW_MAJOR, static_cast<int32_t>(Nnewton), 1, A_in.data(),
+                                    static_cast<int32_t>(Nnewton), ipiv.data(), rhs.data(), 1);
+    if (info != 0)
+    {
+        std::cerr << "ERROR: LAPACKE_dgesv failed with error code " << info << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    // Solution vector
+    dx = rhs;
+}
+
+#else
 void NewtonSolver::solveLinearSystem(const mat_real& A_in, vec_real& rhs, vec_real& dx)
 {
     // Convert matrix to row-major double* for LAPACKE
@@ -267,6 +446,7 @@ void NewtonSolver::solveLinearSystem(const mat_real& A_in, vec_real& rhs, vec_re
     // Solution vector
     dx = rhs;
 }
+#endif
 
 real_t NewtonSolver::computeL2Norm(const vec_real& vc)
 {

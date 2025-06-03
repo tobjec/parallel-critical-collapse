@@ -75,7 +75,8 @@
         "variant": "cpp",
         "charconv": "cpp",
         "chrono": "cpp",
-        "format": "cpp"
+        "format": "cpp",
+        "unordered_set": "cpp"
     },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
 }

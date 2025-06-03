@@ -12,10 +12,10 @@ bool almost_equal(double a, double b, double tol)
 
 void print_vec(const vec_real& vec)
 {
-    std::cout << std::setprecision(16);
+    std::cout << std::setprecision(5);
     for (size_t i=0; i<vec.size(); ++i)
     {
-        if ((i+1)%3 == 0)
+        if ((i+1)%10 == 0)
         {
             std::cout << vec[i] << "," << std::endl;
         }
