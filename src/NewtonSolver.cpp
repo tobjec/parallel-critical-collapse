@@ -25,12 +25,10 @@ NewtonSolver::NewtonSolver(SimulationConfig configIn)
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     MPI_Type_contiguous(Nnewton, MPI_DOUBLE, &mpi_contiguous_t);
-    MPI_Type_vector(Nnewton, 1, Nnewton, MPI_DOUBLE, &col);
-    MPI_Type_commit(&col);
-    MPI_Type_create_resized(col, 0, sizeof(double), &mpi_column_t);
+    MPI_Type_vector(Nnewton, 1, Nnewton, MPI_DOUBLE, &mpi_column_t_unresized);
+    MPI_Type_create_resized(mpi_column_t_unresized, 0, sizeof(real_t), &mpi_column_t);
     MPI_Type_commit(&mpi_contiguous_t);
     MPI_Type_commit(&mpi_column_t);
-    MPI_Type_free(&col);
     #endif
 }
 
@@ -82,7 +80,7 @@ void NewtonSolver::run()
             MPI_Bcast(out0.data(), 1, mpi_contiguous_t, 0, MPI_COMM_WORLD);
         }
 
-        vec_real J(Nnewton*Nnewton);
+        mat_real J(Nnewton, vec_real(Nnewton));
         assembleJacobian(in0, out0, J);
 
         if (rank==0)
@@ -265,7 +263,7 @@ void NewtonSolver::generateGrid()
 }
 
 #ifdef USE_MPI
-void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput, vec_real& jacobian)
+void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput, mat_real& jacobian)
 {
     if (rank==0)
     {
@@ -275,21 +273,24 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
     auto toc_outer = std::chrono::high_resolution_clock::now();
 
     std::vector<int> indices;
+    std::vector<MPI_Request> requests;
 
     for (size_t i=rank; i<Nnewton; i+=size)
     {
         auto toc = std::chrono::high_resolution_clock::now();
 
         indices.push_back(i);
+        if (rank!=0) requests.emplace_back();
         vec_real perturbedInput = baseInput;
         perturbedInput[i] += EpsNewton;
 
         vec_real perturbedOutput(Nnewton);
         shoot(perturbedInput, perturbedOutput);
 
+        // Transposed version of Jacobian
         for (size_t j=0; j<Nnewton; ++j)
         {
-            jacobian[j*Nnewton+i] = (perturbedOutput[j] - baseOutput[j]) / EpsNewton;
+            jacobian[i][j] = (perturbedOutput[j] - baseOutput[j]) / EpsNewton;
         }
        
         auto tic = std::chrono::high_resolution_clock::now();
@@ -300,13 +301,20 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
         std::cout << " s." << std::endl;
     }
 
+    // write_mat("/home/tjechtl/Documents/Education/TUW/Master_Thesis/parallel-critical-collapse/data/jacobian_"
+    //           +std::to_string(rank)+"_"+std::to_string(size)+".csv", jacobian);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+
     if (rank!=0)
     {
         for (size_t i=0; i<indices.size(); ++i)
         {
             size_t idx = indices[i];
-            MPI_Send(&jacobian[idx], 1, mpi_column_t, 0, static_cast<int>(idx), MPI_COMM_WORLD);
+            MPI_Isend(jacobian[idx].data(), 1, mpi_contiguous_t, 0, static_cast<int>(idx), MPI_COMM_WORLD,&requests[i]);
         }
+
+        MPI_Waitall(static_cast<int>(requests.size()), requests.data(), MPI_STATUSES_IGNORE);
     }
     else
     {
@@ -314,9 +322,11 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
         {
             if (i%size!=0)
             {
-                MPI_Recv(&jacobian[i], 1, mpi_column_t, MPI_ANY_SOURCE, static_cast<int>(i), MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                MPI_Recv(jacobian[i].data(), 1, mpi_contiguous_t, MPI_ANY_SOURCE, static_cast<int>(i), MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             }
+            
         }
+
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -409,11 +419,21 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
 
 
 #ifdef USE_MPI
-void NewtonSolver::solveLinearSystem(vec_real& A_in, vec_real& rhs, vec_real& dx)
+void NewtonSolver::solveLinearSystem(mat_real& A_in, vec_real& rhs, vec_real& dx)
 {
+    
+    vec_real A_flat(Nnewton*Nnewton);
+    for (size_t i=0; i<Nnewton; ++i)
+    {
+        for (size_t j=0; j<Nnewton; ++j)
+        {
+            A_flat[j*Nnewton+i] = A_in[i][j];
+        }
+    }
+
     std::vector<lapack_int> ipiv(Nnewton);
 
-    lapack_int info = LAPACKE_dgesv(LAPACK_ROW_MAJOR, static_cast<int32_t>(Nnewton), 1, A_in.data(),
+    lapack_int info = LAPACKE_dgesv(LAPACK_ROW_MAJOR, static_cast<int32_t>(Nnewton), 1, A_flat.data(),
                                     static_cast<int32_t>(Nnewton), ipiv.data(), rhs.data(), 1);
     if (info != 0)
     {

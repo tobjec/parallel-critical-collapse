@@ -17,8 +17,8 @@ SpectralTransformer::SpectralTransformer(size_t N_, real_t period_)
     
     #else
 
-    forward_plan  = fftw_plan_dft_1d(static_cast<int>(N_), forward_data, backward_data, FFTW_BACKWARD, FFTW_MEASURE);
-    backward_plan = fftw_plan_dft_1d(static_cast<int>(N_), backward_data, forward_data, FFTW_FORWARD, FFTW_MEASURE);
+    forward_plan  = fftw_plan_dft_1d(static_cast<int>(N_), forward_data, backward_data, FFTW_BACKWARD, FFTW_ESTIMATE);
+    backward_plan = fftw_plan_dft_1d(static_cast<int>(N_), backward_data, forward_data, FFTW_FORWARD, FFTW_ESTIMATE);
 
     #endif
 

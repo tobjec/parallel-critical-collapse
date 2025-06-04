@@ -1,6 +1,8 @@
 # Prerequisites
 *.d
 .vscode/
+*.csv
+mpi_error_evaluation.py
 
 # Compiled Object files
 *.slo

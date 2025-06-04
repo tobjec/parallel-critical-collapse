@@ -65,3 +65,5 @@ bool almost_equal(double a, double b, double tol = 1e-15);
 void print_vec(const vec_real& vec);
 
 void print_vec(const vec_complex& vec);
+
+void write_mat(const std::string filename, mat_real mat);

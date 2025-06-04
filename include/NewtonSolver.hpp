@@ -36,10 +36,10 @@ class NewtonSolver
 
         #ifdef USE_MPI
         int size, rank;
-        MPI_Datatype mpi_contiguous_t, mpi_column_t, col;
+        MPI_Datatype mpi_contiguous_t, mpi_column_t, mpi_contiguous_t_unresized, mpi_column_t_unresized;
         void assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput,
-                              vec_real& jacobian);
-        void solveLinearSystem(vec_real& A, vec_real& rhs, vec_real& dx);
+                              mat_real& jacobian);
+        void solveLinearSystem(mat_real& A, vec_real& rhs, vec_real& dx);
         #else
         void assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput,
                               mat_real& jacobian);

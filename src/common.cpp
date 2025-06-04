@@ -51,3 +51,22 @@ void print_vec(const vec_complex& vec)
         }
     }
 }
+    
+
+void write_mat(const std::string filename, mat_real mat)
+{
+
+    std::ofstream outfile(filename, std::ios::out);
+
+    outfile << std::setprecision(16);
+    
+    for (size_t i=0; i<mat.size(); ++i)
+    {
+        for (size_t j=0; j<mat[i].size()-1; ++j)
+        {
+            outfile << mat[i][j] << ", ";
+        }
+        outfile << mat[i][mat[i].size()-1] << std::endl;
+    }
+
+}
