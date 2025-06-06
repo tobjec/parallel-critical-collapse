@@ -5,8 +5,18 @@
 int main(int argc, char* argv[])
 {
 
-    #ifdef USE_MPI
+    #if defined(USE_MPI)
     MPI_Init(&argc, &argv);
+    #elif defined(USE_HYBRID)
+    int required = MPI_THREAD_FUNNELED;
+    int provided = -1;
+    MPI_Init_thread(&argc, &argv, required, &provided);
+    
+    if (provided < required)
+    {
+        std::cout << "Not enough thread support!" << std::endl;
+        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+    } 
     #endif
 
     std::string input_path{};
@@ -29,7 +39,7 @@ int main(int argc, char* argv[])
     // Run solver
     solver.run();
 
-    #ifdef USE_MPI
+    #if defined(USE_MPI) || defined(USE_HYBRID)
     MPI_Finalize();
     #endif
 

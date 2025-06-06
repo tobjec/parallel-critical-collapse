@@ -34,7 +34,7 @@ class NewtonSolver
                    vec_complex& mismatchOut_local);
         #endif
 
-        #ifdef USE_MPI
+        #if defined(USE_MPI) || defined(USE_HYBRID)
         int size, rank;
         MPI_Datatype mpi_contiguous_t, mpi_column_t, mpi_contiguous_t_unresized, mpi_column_t_unresized;
         void assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput,
@@ -51,7 +51,7 @@ class NewtonSolver
     public:
         NewtonSolver(SimulationConfig configIn);
 
-        #ifdef USE_MPI
+        #if defined(USE_MPI) || defined(USE_HYBRID)
         ~NewtonSolver();
         #endif
 

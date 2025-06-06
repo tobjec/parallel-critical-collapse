@@ -38,7 +38,7 @@
 #include <mpi.h>
 #endif
 
-#if defined(USE_MPI) && defined(USE_OPENMP)
+#ifdef USE_HYBRID
 #include <mpi.h>
 #include <omp.h>
 #endif

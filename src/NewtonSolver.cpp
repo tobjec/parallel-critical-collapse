@@ -20,7 +20,7 @@ NewtonSolver::NewtonSolver(SimulationConfig configIn)
     shooter = std::make_unique<ShootingSolver>(configIn.Ntau, configIn.Dim,
                                                configIn.PrecisionIRK, initGen, configIn.MaxIterIRK);
 
-    #ifdef USE_MPI
+    #if defined(USE_MPI) || defined(USE_HYBRID)
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
@@ -32,8 +32,7 @@ NewtonSolver::NewtonSolver(SimulationConfig configIn)
     #endif
 }
 
-#ifdef USE_MPI
-
+#if defined(USE_MPI) || defined(USE_HYBRID)
 NewtonSolver::~NewtonSolver()
 {
     MPI_Type_free(&mpi_contiguous_t);
@@ -262,7 +261,7 @@ void NewtonSolver::generateGrid()
 
 }
 
-#ifdef USE_MPI
+#if defined(USE_MPI) || defined(USE_HYBRID)
 void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput, mat_real& jacobian)
 {
     if (rank==0)
@@ -418,10 +417,9 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
 #endif
 
 
-#ifdef USE_MPI
+#if defined(USE_MPI) || defined(USE_HYBRID)
 void NewtonSolver::solveLinearSystem(mat_real& A_in, vec_real& rhs, vec_real& dx)
 {
-    
     vec_real A_flat(Nnewton*Nnewton);
     for (size_t i=0; i<Nnewton; ++i)
     {

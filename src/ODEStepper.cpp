@@ -172,6 +172,9 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
         }
 
         // Compute new stage
+        #ifdef USE_HYBRID
+        #pragma omp parallel for collapse(2) schedule(static)
+        #endif
         for (int i=0; i<stage; ++i)
         {
             for (int j=0; j<Ntau; ++j)
@@ -186,6 +189,9 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
         }
 
         real_t norm2 = 0.0;
+        #ifdef USE_HYBRID
+        #pragma omp parallel for collapse(2) reduction(+:norm2)
+        #endif
         for (int i=0; i<stage; ++i)
         {
             for (int j=0; j<Ntau; ++j)
