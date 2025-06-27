@@ -66,4 +66,8 @@ void print_vec(const vec_real& vec);
 
 void print_vec(const vec_complex& vec);
 
-void write_mat(const std::string filename, mat_real mat);
+void write_mat(std::string filename, mat_real& mat);
+
+void write_vec(std::string filename, vec_real& vec);
+
+void write_vec(std::string filename, vec_complex& vec);

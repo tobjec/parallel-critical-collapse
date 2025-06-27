@@ -2,63 +2,63 @@
 
 ODEStepper::ODEStepper(int Ntau_, real_t Dim_, real_t precision_, Scheme method_, InitialConditionGenerator& initGen_)
     : Ntau(Ntau_), Dim(Dim_), precision(precision_), scheme(method_), initGen(initGen_)
+{
+    size_t stage {};
+
+    switch (scheme)
     {
-        size_t stage {};
+        case Scheme::IRK1:
+            stage = 1;
+            a.assign(stage, vec_real(stage));
+            b.resize(stage);
+            c.resize(stage);
 
-        switch (scheme)
-        {
-            case Scheme::IRK1:
-                stage = 1;
-                a.assign(stage, vec_real(stage));
-                b.resize(stage);
-                c.resize(stage);
+            a[0][0] = 0.5;
+            b[0] = 1.0;
+            c[0] = 0.5;
+            
+            break;
 
-                a[0][0] = 0.5;
-                b[0] = 1.0;
-                c[0] = 0.5;
-                
-                break;
+        case Scheme::IRK2:
+            stage = 2;
+            a.assign(stage, vec_real(stage));
+            b.resize(stage);
+            c.resize(stage);
 
-            case Scheme::IRK2:
-                stage = 2;
-                a.assign(stage, vec_real(stage));
-                b.resize(stage);
-                c.resize(stage);
+            a[0][0] = 0.25;
+            a[0][1] = 0.25 - 0.5 / std::sqrt(3.0);
+            a[1][0] = 0.25 + 0.5 / std::sqrt(3.0);
+            a[1][1] = 0.25;
+            b[0] = b[1] = 0.5;
+            c[0] = 0.5 - 0.5 / std::sqrt(3.0);
+            c[1] = 0.5 + 0.5 / std::sqrt(3.0);
 
-                a[0][0] = 0.25;
-                a[0][1] = 0.25 - 0.5 / std::sqrt(3.0);
-                a[1][0] = 0.25 + 0.5 / std::sqrt(3.0);
-                a[1][1] = 0.25;
-                b[0] = b[1] = 0.5;
-                c[0] = 0.5 - 0.5 / std::sqrt(3.0);
-                c[1] = 0.5 + 0.5 / std::sqrt(3.0);
+            break;
 
-                break;
+        case Scheme::IRK3:
+            stage = 3;
+            a.assign(stage, vec_real(stage));
+            b.resize(stage);
+            c.resize(stage);
 
-            case Scheme::IRK3:
-                stage = 3;
-                a.assign(stage, vec_real(stage));
-                b.resize(stage);
-                c.resize(stage);
+            a[0][0] = 5.0 / 36.0;
+            a[0][1] = 2.0 / 9.0 - 1.0 / std::sqrt(15.0);
+            a[0][2] = 5.0 / 36.0 - 0.5 / std::sqrt(15.0);
+            a[1][0] = 5.0 / 36.0 + std::sqrt(15.0) / 24.0;
+            a[1][1] = 2.0 / 9.0; 
+            a[1][2] = 5.0 / 36.0 - std::sqrt(15.0) / 24.0;
+            a[2][0] = 5.0 / 36.0 + 0.5 / std::sqrt(15.0);
+            a[2][1] = 2.0 / 9.0 + 1.0 / std::sqrt(15.0);
+            a[2][2] = 5.0 / 36.0;
+            b[0] = b[2] = 5.0 / 18.0;
+            b[1] = 4.0 / 9.0;
+            c[0] = 0.5 - std::sqrt(15.0) / 10.0;
+            c[1] = 0.5;
+            c[2] = 0.5 + std::sqrt(15.0) / 10.0;
 
-                a[0][0] = 5.0 / 36.0;
-                a[0][1] = 2.0 / 9.0 - 1.0 / std::sqrt(15.0);
-                a[0][2] = 5.0 / 36.0 - 0.5 / std::sqrt(15.0);
-                a[1][0] = 5.0 / 36.0 + std::sqrt(15.0) / 24.0;
-                a[1][1] = 2.0 / 9.0; 
-                a[1][2] = 5.0 / 36.0 - std::sqrt(15.0) / 24.0;
-                a[2][0] = 5.0 / 36.0 + 0.5 / std::sqrt(15.0);
-                a[2][1] = 2.0 / 9.0 + 1.0 / std::sqrt(15.0);
-                a[2][2] = 5.0 / 36.0;
-                b[0] = b[2] = 5.0 / 18.0;
-                b[1] = 4.0 / 9.0;
-                c[0] = 0.5 - std::sqrt(15.0) / 10.0;
-                c[1] = 0.5;
-                c[2] = 0.5 + std::sqrt(15.0) / 10.0;
-
-                break;
-        }
+            break;
     }
+}
 
 void ODEStepper::computeDerivatives(vec_real& Yreal, vec_real& dYreal, real_t x)
 {
@@ -74,6 +74,9 @@ void ODEStepper::computeDerivatives(vec_real& Yreal, vec_real& dYreal, real_t x)
 
     initGen.StateVectorToFields(Y, U, V, F, IA2, dUdt, dVdt, dFdt, x);
 
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
     for (int j=0; j<Ntau; ++j)
     {
         dUdx[j] = (F[j] * ((Dim - 2.0) * V[j]

@@ -3,7 +3,7 @@
 ShootingSolver::ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, InitialConditionGenerator& initGen_, int maxIts_)
     : Ntau(Ntau_), Dim(Dim_), Precision(precision_), initGen(initGen_), maxIts(maxIts_)
 {
-    stepper = std::make_unique<ODEStepper>(Ntau_, Dim_, precision_, Scheme::IRK1, initGen);
+    stepper = std::make_unique<ODEStepper>(Ntau_, Dim_, precision_, Scheme::IRK2, initGen);
 }
 
 void ShootingSolver::shoot(vec_complex& YLeft, vec_complex& YRight, const vec_real& gridX,
@@ -29,7 +29,7 @@ void ShootingSolver::integrateToMidpoint(
             stepper->integrate(Y1, Y2, xGrid[i], xGrid[i+1], converged, itsReached, maxIts);
             Y1 = Y2;
         }
-        Yfinal = Y2;
+        Yfinal = Y1;
         
     }
     else
@@ -39,7 +39,7 @@ void ShootingSolver::integrateToMidpoint(
             stepper->integrate(Y1, Y2, xGrid[i], xGrid[i-1], converged, itsReached, maxIts);
             Y1 = Y2;
         }
-        Yfinal = Y2;
+        Yfinal = Y1;
 
     }
 }

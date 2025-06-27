@@ -23,7 +23,7 @@ int main(int argc, char* argv[])
 
     if (argc<2)
     {
-        input_path = "/home/tjechtl/Documents/Education/TUW/Master_Thesis/parallel-critical-collapse/data/simulation.json";
+        input_path = "/home/tjechtl/Documents/Education/TUW/Master_Thesis/parallel-critical-collapse/data/simulation_4D.json";
     }
     else
     {

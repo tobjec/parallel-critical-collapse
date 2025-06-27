@@ -71,11 +71,13 @@ make_core_objects(cc_core_serial)
 
 if((ENABLE_OPENMP OR ENABLE_HYBRID) AND OpenMP_FOUND)
   make_core_objects(cc_core_openmp)
+  target_compile_definitions(cc_core_openmp PUBLIC USE_OPENMP)
   target_link_libraries(cc_core_openmp PUBLIC OpenMP::OpenMP_CXX)
 endif()
 
 if((ENABLE_MPI OR ENABLE_HYBRID) AND MPI_CXX_FOUND)
   make_core_objects(cc_core_mpi)
+  target_compile_definitions(cc_core_mpi PUBLIC USE_MPI)
   target_link_libraries(cc_core_mpi PUBLIC MPI::MPI_CXX)
 endif()
 

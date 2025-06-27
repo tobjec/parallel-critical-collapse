@@ -22,13 +22,13 @@ class NewtonSolver
     
         std::unique_ptr<ShootingSolver> shooter;
     
-        void initializeInput();
+        void initializeInput(bool printDiagnostics=false);
         void generateGrid();
         void shoot(vec_real& inputVec, vec_real& outputVec);
         
         #ifdef USE_OPENMP
         void initializeInput(InitialConditionGenerator& initGen_local, vec_complex& YLeft_local, vec_complex& YRight_local,
-                             vec_real& Up_local, vec_real& psic_local, vec_real& fc_local, real_t Delta_local);
+                             vec_real& Up_local, vec_real& psic_local, vec_real& fc_local, real_t Delta_local, bool printDiagnostics=false);
         void shoot(vec_real& inputVec, vec_real& outputVec, ShootingSolver& shooter_local,
                    InitialConditionGenerator& initGen_local, vec_complex& YLeft_local, vec_complex& YRight_local,
                    vec_complex& mismatchOut_local);

@@ -4,7 +4,7 @@ NewtonSolver::NewtonSolver(SimulationConfig configIn)
     : config(configIn), Ntau(configIn.Ntau), Nnewton(3*configIn.Ntau/4), maxIts(configIn.MaxIterNewton), Dim(configIn.Dim),
       Delta(configIn.Delta), slowErr(configIn.SlowError), EpsNewton(configIn.EpsNewton), TolNewton(configIn.PrecisionNewton),
       XLeft(configIn.XLeft), XMid(configIn.XMid), XRight(configIn.XRight), NLeft(configIn.NLeft), NRight(configIn.NRight),
-      iL(0), iM(configIn.NLeft), iR(configIn.NLeft+configIn.NRight-1), initGen(configIn.Ntau, configIn.Dim, configIn.Delta)
+      iL(0), iM(configIn.NLeft), iR(configIn.NLeft+configIn.NRight), initGen(configIn.Ntau, configIn.Dim, configIn.Delta)
 {
     fc = configIn.fc;
     psic = configIn.psic;
@@ -12,7 +12,7 @@ NewtonSolver::NewtonSolver(SimulationConfig configIn)
     mismatchOut.resize(Ntau);
     in0.resize(3*configIn.Ntau/4);
     out0.resize(3*configIn.Ntau/4);
-    XGrid.resize(configIn.NLeft + configIn.NRight);
+    XGrid.resize(configIn.NLeft + configIn.NRight + 1);
 
     YLeft.resize(Ntau);
     YRight.resize(Ntau);
@@ -80,7 +80,7 @@ void NewtonSolver::run()
         }
 
         mat_real J(Nnewton, vec_real(Nnewton));
-        assembleJacobian(in0, out0, J);
+        assembleJacobian(in0, out0, J);        
 
         if (rank==0)
         {
@@ -109,8 +109,9 @@ void NewtonSolver::run()
 #else
 void NewtonSolver::run()
 {
-    real_t err = 1.0;
     real_t fac = 1.0;
+    real_t err = 1.0;
+    real_t errOld = 1.0;
 
     initGen.packSpectralFields(Up, psic, fc, in0);
     in0[2*Nnewton/3+2] = Delta;
@@ -134,6 +135,9 @@ void NewtonSolver::run()
 
         mat_real J(Nnewton, vec_real(Nnewton));
         assembleJacobian(in0, out0, J);
+
+        write_mat("/home/tjechtl/Documents/Education/TUW/Master_Thesis/parallel-critical-collapse/data/jacobian_4D_1_serial.csv", J);
+        //write_vec("/home/tjechtl/Documents/Education/TUW/Master_Thesis/parallel-critical-collapse/data/test_4D_1.csv",out0);
 
         // Solving J dx = -out0
         vec_real dx(Nnewton);
@@ -182,10 +186,10 @@ void NewtonSolver::shoot(vec_real& inputVec, vec_real& outputVec)
 
 }
 
-void NewtonSolver::initializeInput()
+void NewtonSolver::initializeInput(bool printDiagnostics)
 {
-    initGen.computeLeftExpansion(XLeft, fc, psic, YLeft, Delta, false);
-    initGen.computeRightExpansion(XRight, Up, YRight, Delta, false);
+    initGen.computeLeftExpansion(XLeft, fc, psic, YLeft, Delta, printDiagnostics);
+    initGen.computeRightExpansion(XRight, Up, YRight, Delta, printDiagnostics);
 }
 
 #ifdef USE_OPENMP
@@ -194,7 +198,7 @@ void NewtonSolver::shoot(vec_real& inputVec, vec_real& outputVec, ShootingSolver
                    vec_complex& mismatchOut_local)
 {
     vec_real U(Ntau), V(Ntau), F(Ntau), Up_local(Ntau), psic_local(Ntau), fc_local(Ntau);
-    real_t Delta_local {0};
+    real_t Delta_local {};
 
     Delta_local = inputVec[2*Nnewton/3+2];
     inputVec[2*Nnewton/3+2] = 0.0;
@@ -220,10 +224,10 @@ void NewtonSolver::shoot(vec_real& inputVec, vec_real& outputVec, ShootingSolver
 void NewtonSolver::initializeInput(InitialConditionGenerator& initGen_local, 
                                    vec_complex& YLeft_local, vec_complex& YRight_local,
                                    vec_real& Up_local, vec_real& psic_local, vec_real& fc_local,
-                                   real_t Delta_local)
+                                   real_t Delta_local, bool printDiagnostics)
 {
-    initGen_local.computeLeftExpansion(XLeft, fc_local, psic_local, YLeft_local, Delta_local, false);
-    initGen_local.computeRightExpansion(XRight, Up_local, YRight_local, Delta_local, false);
+    initGen_local.computeLeftExpansion(XLeft, fc_local, psic_local, YLeft_local, Delta_local, printDiagnostics);
+    initGen_local.computeRightExpansion(XRight, Up_local, YRight_local, Delta_local, printDiagnostics);
 }
 
 #endif
@@ -233,24 +237,29 @@ void NewtonSolver::generateGrid()
     if (config.UseLogGrid)
     {
         XGrid[iL] = XLeft;
+        XGrid[iM] = XMid;
         XGrid[iR] = XRight;
 
         // Uniform grid in z
-        real_t ZLeft = std::log(XLeft/(1-XLeft));
-        real_t ZMid = std::log(XMid/(1-XMid));
-        real_t ZRight = std::log(XRight/(1-XRight));
+        real_t ZLeft = std::log(XLeft) - std::log(1.0-XLeft);
+        real_t ZMid = std::log(XMid) - std::log(1.0-XMid);
+        real_t ZRight = std::log(XRight) - std::log(1.0-XRight);
 
         real_t dZL = (ZMid - ZLeft) / static_cast<real_t>(NLeft);
         real_t dZR = (ZRight - ZMid) / static_cast<real_t>(NRight);
 
+        #ifdef USE_HYBRID
+        #pragma omp parallel for schedule(static)
+        #endif
         for (size_t j=iL+1; j<iM; ++j)
         {
             real_t exponent = ZLeft + static_cast<real_t>(j-iL) * dZL;
             XGrid[j] = std::exp(exponent) / (1.0 + std::exp(exponent));
         }
 
-        XGrid[iM] = XMid;
-
+        #ifdef USE_HYBRID
+        #pragma omp parallel for schedule(static)
+        #endif
         for (size_t j=iM+1; j<iR; ++j)
         {
             real_t exponent = ZMid + static_cast<real_t>(j-iM) * dZR;
@@ -287,6 +296,9 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
         shoot(perturbedInput, perturbedOutput);
 
         // Transposed version of Jacobian
+        #ifdef USE_HYBRID
+        #pragma omp parallel for schedule(static)
+        #endif
         for (size_t j=0; j<Nnewton; ++j)
         {
             jacobian[i][j] = (perturbedOutput[j] - baseOutput[j]) / EpsNewton;
@@ -300,9 +312,6 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
         std::cout << " s." << std::endl;
     }
 
-    // write_mat("/home/tjechtl/Documents/Education/TUW/Master_Thesis/parallel-critical-collapse/data/jacobian_"
-    //           +std::to_string(rank)+"_"+std::to_string(size)+".csv", jacobian);
-
     MPI_Barrier(MPI_COMM_WORLD);
 
     if (rank!=0)
@@ -310,7 +319,7 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
         for (size_t i=0; i<indices.size(); ++i)
         {
             size_t idx = indices[i];
-            MPI_Isend(jacobian[idx].data(), 1, mpi_contiguous_t, 0, static_cast<int>(idx), MPI_COMM_WORLD,&requests[i]);
+            MPI_Isend(jacobian[idx].data(), 1, mpi_contiguous_t, 0, static_cast<int>(idx), MPI_COMM_WORLD, &requests[i]);
         }
 
         MPI_Waitall(static_cast<int>(requests.size()), requests.data(), MPI_STATUSES_IGNORE);
@@ -356,7 +365,7 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
 
         auto toc = std::chrono::high_resolution_clock::now();
 
-        #pragma omp for schedule(static,8)
+        #pragma omp for schedule(static)
         for (size_t i=0; i<Nnewton; ++i)
         {
             vec_real perturbedInput = baseInput;
@@ -476,7 +485,7 @@ real_t NewtonSolver::computeL2Norm(const vec_real& vc)
 void NewtonSolver::writeFinalOutput()
 {
     // Append all to a structured JSON file
-    OutputWriter::appendResultToJson("data/results.json", Dim, Delta, fc, psic, Up);
+    OutputWriter::appendResultToJson("/home/tjechtl/Documents/Education/TUW/Master_Thesis/parallel-critical-collapse/data/results.json", Dim, Delta, fc, psic, Up);
 
     std::cout << "Final result stored under dimension d = " << Dim
               << " in data/results.json\n";

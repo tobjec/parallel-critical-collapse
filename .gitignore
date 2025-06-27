@@ -37,3 +37,6 @@ mpi_error_evaluation.py
 # Build directories
 build/
 build-asan/
+.vscode/settings.json
+data/results.json
+data/xgrid.txt
