@@ -58,7 +58,6 @@ void write_mat(std::string filename, mat_real& mat)
     std::ofstream outfile(filename, std::ios::out);
 
     outfile << std::setprecision(16);
-    
     for (size_t i=0; i<mat.size(); ++i)
     {
         for (size_t j=0; j<mat[i].size()-1; ++j)
@@ -94,4 +93,49 @@ void write_vec(std::string filename, vec_complex& vec)
         outfile <<"(" << vec[i].real() << ", " << vec[i].imag() << "), " << std::endl;
     }
     outfile <<"(" << vec[vec.size()-1].real() << ", " << vec[vec.size()-1].imag() << ")" << std::endl;
+}
+
+vec_real build_design_matrix(real_t x1, real_t x2, real_t x3)
+{
+    vec_real design_matrix(3*3, 0);
+    
+    design_matrix[0] = x1*x1;
+    design_matrix[1] = x1;
+    design_matrix[2] = 1.0;
+
+
+    design_matrix[3] = x2*x2;
+    design_matrix[4] = x2;
+    design_matrix[5] = 1.0;
+
+
+    design_matrix[6] = x3*x3;
+    design_matrix[7] = x3;
+    design_matrix[8] = 1.0;
+
+    return design_matrix;
+}
+
+vec_real fit_quadratic_least_squares(const vec_real& x_vals, const vec_real& y_vals)
+{
+    const lapack_int m = 3; 
+    const lapack_int n = 3; 
+    const lapack_int nrhs = 1;
+    const lapack_int lda = n;
+    const lapack_int ldb = n;
+
+    vec_real A = build_design_matrix(x_vals[0], x_vals[1], x_vals[2]);
+    vec_real b = y_vals;
+
+    b.resize(n, 0.0);
+
+    // Solve A * coeffs = b using least-squares
+    lapack_int info = LAPACKE_dgels(LAPACK_ROW_MAJOR, 'N', m, n, nrhs, A.data(), lda, b.data(), ldb);
+    if (info != 0)
+    {
+        throw std::runtime_error("LAPACKE_dgels failed with info = " + std::to_string(info));
+    }
+
+    // a, b, c 
+    return {b[0], b[1], b[2]};
 }

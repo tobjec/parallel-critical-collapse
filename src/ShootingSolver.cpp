@@ -27,6 +27,14 @@ void ShootingSolver::integrateToMidpoint(
         for (size_t i=startIdx; i<endIdx; ++i)
         {
             stepper->integrate(Y1, Y2, xGrid[i], xGrid[i+1], converged, itsReached, maxIts);
+
+            if (!converged)
+            {
+                std::cerr << "ERROR: No convergence between grid point " << xGrid[i] << " (" << i << ") ";
+                std::cerr << " and " << xGrid[i+1] << " (" << i+1 << ") " << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+
             Y1 = Y2;
         }
         Yfinal = Y1;
@@ -37,6 +45,14 @@ void ShootingSolver::integrateToMidpoint(
         for (size_t i=startIdx; i>endIdx; --i)
         {
             stepper->integrate(Y1, Y2, xGrid[i], xGrid[i-1], converged, itsReached, maxIts);
+
+            if (!converged)
+            {
+                std::cerr << "ERROR: No convergence between grid point " << xGrid[i] << " (" << i << ") ";
+                std::cerr << " and " << xGrid[i-1] << " (" << i-1 << ") " << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+
             Y1 = Y2;
         }
         Yfinal = Y1;

@@ -6,14 +6,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # ─────────────────────────── 1. user-visible options ────────────────────────
 option(ENABLE_OPENMP  "Build OpenMP variant"             ON)
 option(ENABLE_MPI     "Build MPI variant"                ON)
-option(ENABLE_CUDA    "Build CUDA variant"               OFF)
 option(ENABLE_HYBRID  "Build MPI+OpenMP hybrid variant"  ON)
 option(ENABLE_SERIAL  "Always build a pure serial variant" ON)
 
 # ─────────────────────────── 2. dependencies ────────────────────────────────
 find_package(OpenMP QUIET)
 find_package(MPI    QUIET)
-enable_language(CUDA OPTIONAL)
 
 find_package(PkgConfig       REQUIRED)
 pkg_check_modules(FFTW    REQUIRED IMPORTED_TARGET fftw3)
@@ -26,9 +24,6 @@ if(ENABLE_OPENMP AND NOT OpenMP_FOUND)
 endif()
 if((ENABLE_MPI OR ENABLE_HYBRID) AND NOT MPI_CXX_FOUND)
   message(FATAL_ERROR "MPI requested but no MPI C++ compiler found")
-endif()
-if(ENABLE_CUDA AND NOT CMAKE_CUDA_COMPILER)
-  message(FATAL_ERROR "ENABLE_CUDA=ON but no CUDA compiler detected")
 endif()
 
 # ─────────────────────────── 4. common flags  ───────────────────────────────
@@ -69,19 +64,18 @@ endfunction()
 # ───────────────────────── 6a. object libraries  ────────────────────────────
 make_core_objects(cc_core_serial)
 
-if((ENABLE_OPENMP OR ENABLE_HYBRID) AND OpenMP_FOUND)
+if(ENABLE_OPENMP AND OpenMP_FOUND)
   make_core_objects(cc_core_openmp)
   target_compile_definitions(cc_core_openmp PUBLIC USE_OPENMP)
   target_link_libraries(cc_core_openmp PUBLIC OpenMP::OpenMP_CXX)
 endif()
 
-if((ENABLE_MPI OR ENABLE_HYBRID) AND MPI_CXX_FOUND)
+if(ENABLE_MPI AND MPI_CXX_FOUND)
   make_core_objects(cc_core_mpi)
   target_compile_definitions(cc_core_mpi PUBLIC USE_MPI)
   target_link_libraries(cc_core_mpi PUBLIC MPI::MPI_CXX)
 endif()
 
-# Hybrid: **single** macro USE_HYBRID (no USE_MPI / USE_OPENMP)
 if(ENABLE_HYBRID AND OpenMP_FOUND AND MPI_CXX_FOUND)
   make_core_objects(cc_core_hybrid)
   target_compile_definitions(cc_core_hybrid PUBLIC USE_HYBRID)
@@ -118,15 +112,6 @@ if(ENABLE_HYBRID AND OpenMP_FOUND AND MPI_CXX_FOUND)
   make_variant(critical_collapse_hybrid cc_core_hybrid)
 endif()
 
-if(ENABLE_CUDA AND CMAKE_CUDA_COMPILER)
-  enable_language(CUDA)
-  make_variant(critical_collapse_cuda cc_core_serial)
-  target_compile_definitions(critical_collapse_cuda PUBLIC USE_CUDA)
-  target_sources(critical_collapse_cuda PRIVATE src/cuda/kernels.cu)
-  target_link_libraries(critical_collapse_cuda PUBLIC CUDA::cudart)
-  set_target_properties(critical_collapse_cuda PROPERTIES CUDA_ARCHITECTURES "60;70;80")
-endif()
-
 # ────────────────────────── 9. executables  ────────────────────────────────
 function(make_exe exe_name lib_name)
   if(TARGET ${lib_name})
@@ -141,7 +126,6 @@ make_exe(cc_serial  critical_collapse_serial)
 make_exe(cc_openmp  critical_collapse_openmp)
 make_exe(cc_mpi     critical_collapse_mpi)
 make_exe(cc_hybrid  critical_collapse_hybrid)
-make_exe(cc_cuda    critical_collapse_cuda)
 
 # ────────────────────────── 10. tests  ──────────────────────────────────────
 enable_testing()
@@ -149,7 +133,7 @@ add_subdirectory(test)
 
 # ────────────────────────── 11. summary  ────────────────────────────────────
 message(STATUS "====== Variants built ======")
-foreach(v serial openmp mpi hybrid cuda)
+foreach(v serial openmp mpi hybrid)
   if(TARGET critical_collapse_${v})
     message(STATUS "  ✔  ${v}")
   endif()

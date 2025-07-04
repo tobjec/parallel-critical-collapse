@@ -71,3 +71,7 @@ void write_mat(std::string filename, mat_real& mat);
 void write_vec(std::string filename, vec_real& vec);
 
 void write_vec(std::string filename, vec_complex& vec);
+
+vec_real build_design_matrix(real_t x1, real_t x2, real_t x3);
+
+vec_real fit_quadratic_least_squares(const vec_real& x_vals, const vec_real& y_vals);

@@ -15,10 +15,12 @@ class NewtonSolver
         real_t EpsNewton, TolNewton;
         real_t XLeft, XMid, XRight;
         size_t NLeft, NRight, iL, iM, iR;
+        bool Debug, Verbose, Converged;
     
         InitialConditionGenerator initGen;
         vec_complex YLeft, YRight, mismatchOut;
         vec_real fc, psic, Up, XGrid, in0, out0;
+        json resultDict;
     
         std::unique_ptr<ShootingSolver> shooter;
     
@@ -55,7 +57,7 @@ class NewtonSolver
         ~NewtonSolver();
         #endif
 
-        void run();
+        json run();
         void writeFinalOutput();
 
 };

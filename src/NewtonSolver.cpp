@@ -4,7 +4,8 @@ NewtonSolver::NewtonSolver(SimulationConfig configIn)
     : config(configIn), Ntau(configIn.Ntau), Nnewton(3*configIn.Ntau/4), maxIts(configIn.MaxIterNewton), Dim(configIn.Dim),
       Delta(configIn.Delta), slowErr(configIn.SlowError), EpsNewton(configIn.EpsNewton), TolNewton(configIn.PrecisionNewton),
       XLeft(configIn.XLeft), XMid(configIn.XMid), XRight(configIn.XRight), NLeft(configIn.NLeft), NRight(configIn.NRight),
-      iL(0), iM(configIn.NLeft), iR(configIn.NLeft+configIn.NRight), initGen(configIn.Ntau, configIn.Dim, configIn.Delta)
+      iL(0), iM(configIn.NLeft), iR(configIn.NLeft+configIn.NRight), Debug(configIn.Debug), Verbose(configIn.Verbose),
+      Converged(configIn.Converged), initGen(configIn.Ntau, configIn.Dim, configIn.Delta)
 {
     fc = configIn.fc;
     psic = configIn.psic;
@@ -39,20 +40,128 @@ NewtonSolver::~NewtonSolver()
     MPI_Type_free(&mpi_column_t);
 }
 
-void NewtonSolver::run()
+json NewtonSolver::run()
 {
-    real_t err = 1.0;
-    real_t fac = 1.0;
+    if (!Converged)
+    {
+        real_t err = 1.0;
+        real_t fac = 1.0;
+        real_t errOld = 1.0;
 
-    initGen.packSpectralFields(Up, psic, fc, in0);
-    in0[2*Nnewton/3+2] = Delta;
-    generateGrid();
+        initGen.packSpectralFields(Up, psic, fc, in0);
+        in0[2*Nnewton/3+2] = Delta;
+        generateGrid();
 
-    for (size_t its=0; its<maxIts; ++its)
+        for (size_t its=0; its<maxIts; ++its)
+        {
+            if (rank==0)
+            {
+                std::cout << "Newton iteration: " << its + 1 << std::endl;
+
+                errOld = err;
+
+                shoot(in0, out0);
+
+                err = computeL2Norm(out0);
+                std::cout << "Mismatch norm: " << err << std::endl;
+
+                if (err<TolNewton)
+                {
+                    Converged = true;
+                    std::cout << "The solution has converged!" << std::endl;
+                    writeFinalOutput();
+                }
+
+            }
+            else
+            {
+                errOld = err;
+            }
+
+            MPI_Bcast(&err, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+            if (err<TolNewton)
+            {
+                break;
+            }
+            else
+            {
+                MPI_Bcast(in0.data(), 1, mpi_contiguous_t, 0, MPI_COMM_WORLD);
+                MPI_Bcast(out0.data(), 1, mpi_contiguous_t, 0, MPI_COMM_WORLD);
+            }
+
+            if (its >= 2 &&
+                static_cast<int>(std::log10(err)) >
+                static_cast<int>(std::log10(errOld)))
+            {
+                std::cerr << "Mismatch increased – terminating Newton.\n";
+                break;                    
+            }
+
+            mat_real J(Nnewton, vec_real(Nnewton));
+            assembleJacobian(in0, out0, J);        
+
+            if (rank==0)
+            {
+                // Solving J dx = -out0
+                vec_real dx(Nnewton);
+                vec_real rhs = out0;
+                std::for_each(rhs.begin(), rhs.end(), [](auto& ele){ele*=-1.0;});
+
+                solveLinearSystem(J, rhs, dx);
+
+                // Damping factor based on mismatch reduction
+                fac = std::min(1.0, slowErr / err);
+
+                for (size_t i=0; i<Nnewton; ++i)
+                {
+                    in0[i] += fac * dx[i];
+                }
+            }
+            
+        }
+        if (rank==0 && !Converged)
+        {
+            std::cerr << "Newton method did not converge in " << maxIts << " iterations." << std::endl;
+        }
+        if (!Converged)
+        {
+            MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+        }
+        
+    }
+    else
     {
         if (rank==0)
         {
+            std::cout << "The solution is already marked as converged!" << std::endl;
+            writeFinalOutput();
+        }
+
+    }
+
+    return resultDict;
+
+}
+
+#else
+json NewtonSolver::run()
+{
+    if (!Converged)
+    {
+        real_t fac = 1.0;
+        real_t err = 1.0;
+        real_t errOld = 1.0;
+
+        initGen.packSpectralFields(Up, psic, fc, in0);
+        in0[2*Nnewton/3+2] = Delta;
+        generateGrid();
+
+        for (size_t its=0; its<maxIts; ++its)
+        {
             std::cout << "Newton iteration: " << its + 1 << std::endl;
+
+            errOld = err;
 
             shoot(in0, out0);
 
@@ -61,29 +170,26 @@ void NewtonSolver::run()
 
             if (err<TolNewton)
             {
-                std::cout << "Converged!" << std::endl;
+                Converged = true;
+                std::cout << "The solution has converged!" << std::endl;
                 writeFinalOutput();
+                break;
             }
 
-        }
+            if (its >= 2 &&
+                static_cast<int>(std::log10(err)) >
+                static_cast<int>(std::log10(errOld)))
+            {
+                std::cerr << "Mismatch increased – terminating Newton.\n";
+                break;                    
+            }
 
-        MPI_Bcast(&err, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+            mat_real J(Nnewton, vec_real(Nnewton));
+            assembleJacobian(in0, out0, J);
 
-        if (err<TolNewton)
-        {
-            return;
-        }
-        else
-        {
-            MPI_Bcast(in0.data(), 1, mpi_contiguous_t, 0, MPI_COMM_WORLD);
-            MPI_Bcast(out0.data(), 1, mpi_contiguous_t, 0, MPI_COMM_WORLD);
-        }
+            write_mat("/home/tjechtl/Documents/Education/TUW/Master_Thesis/parallel-critical-collapse/data/jacobian_4D_1_serial_new.csv", J);
+            //write_vec("/home/tjechtl/Documents/Education/TUW/Master_Thesis/parallel-critical-collapse/data/test_4D_1.csv",out0);
 
-        mat_real J(Nnewton, vec_real(Nnewton));
-        assembleJacobian(in0, out0, J);        
-
-        if (rank==0)
-        {
             // Solving J dx = -out0
             vec_real dx(Nnewton);
             vec_real rhs = out0;
@@ -99,64 +205,21 @@ void NewtonSolver::run()
                 in0[i] += fac * dx[i];
             }
         }
+
+        if (!Converged)
+        {
+            std::cerr << "Newton method did not converge in " << maxIts << " iterations." << std::endl;
+            std::exit(EXIT_FAILURE);
+        }
         
     }
-
-    std::cerr << "Newton method did not converge in " << maxIts << " iterations." << std::endl;
-    std::exit(EXIT_FAILURE);
-}
-
-#else
-void NewtonSolver::run()
-{
-    real_t fac = 1.0;
-    real_t err = 1.0;
-    real_t errOld = 1.0;
-
-    initGen.packSpectralFields(Up, psic, fc, in0);
-    in0[2*Nnewton/3+2] = Delta;
-    generateGrid();
-
-    for (size_t its=0; its<maxIts; ++its)
+    else
     {
-        std::cout << "Newton iteration: " << its + 1 << std::endl;
-
-        shoot(in0, out0);
-
-        err = computeL2Norm(out0);
-        std::cout << "Mismatch norm: " << err << std::endl;
-
-        if (err<TolNewton)
-        {
-            std::cout << "Converged!" << std::endl;
-            writeFinalOutput();
-            return;
-        }
-
-        mat_real J(Nnewton, vec_real(Nnewton));
-        assembleJacobian(in0, out0, J);
-
-        write_mat("/home/tjechtl/Documents/Education/TUW/Master_Thesis/parallel-critical-collapse/data/jacobian_4D_1_serial.csv", J);
-        //write_vec("/home/tjechtl/Documents/Education/TUW/Master_Thesis/parallel-critical-collapse/data/test_4D_1.csv",out0);
-
-        // Solving J dx = -out0
-        vec_real dx(Nnewton);
-        vec_real rhs = out0;
-        std::for_each(rhs.begin(), rhs.end(), [](auto& ele){ele*=-1.0;});
-
-        solveLinearSystem(J, rhs, dx);
-
-        // Damping factor based on mismatch reduction
-        fac = std::min(1.0, slowErr / err);
-
-        for (size_t i=0; i<Nnewton; ++i)
-        {
-            in0[i] += fac * dx[i];
-        }
+        std::cout << "The solution is already marked as converged!" << std::endl;
+        writeFinalOutput();
     }
 
-    std::cerr << "Newton method did not converge in " << maxIts << " iterations." << std::endl;
-    std::exit(EXIT_FAILURE);
+    return resultDict;
 }
 
 #endif
@@ -234,38 +297,34 @@ void NewtonSolver::initializeInput(InitialConditionGenerator& initGen_local,
 
 void NewtonSolver::generateGrid()
 {
-    if (config.UseLogGrid)
+    XGrid[iL] = XLeft;
+    XGrid[iM] = XMid;
+    XGrid[iR] = XRight;
+
+    // Uniform grid in z
+    real_t ZLeft = std::log(XLeft) - std::log(1.0-XLeft);
+    real_t ZMid = std::log(XMid) - std::log(1.0-XMid);
+    real_t ZRight = std::log(XRight) - std::log(1.0-XRight);
+
+    real_t dZL = (ZMid - ZLeft) / static_cast<real_t>(NLeft);
+    real_t dZR = (ZRight - ZMid) / static_cast<real_t>(NRight);
+
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=iL+1; j<iM; ++j)
     {
-        XGrid[iL] = XLeft;
-        XGrid[iM] = XMid;
-        XGrid[iR] = XRight;
+        real_t exponent = ZLeft + static_cast<real_t>(j-iL) * dZL;
+        XGrid[j] = std::exp(exponent) / (1.0 + std::exp(exponent));
+    }
 
-        // Uniform grid in z
-        real_t ZLeft = std::log(XLeft) - std::log(1.0-XLeft);
-        real_t ZMid = std::log(XMid) - std::log(1.0-XMid);
-        real_t ZRight = std::log(XRight) - std::log(1.0-XRight);
-
-        real_t dZL = (ZMid - ZLeft) / static_cast<real_t>(NLeft);
-        real_t dZR = (ZRight - ZMid) / static_cast<real_t>(NRight);
-
-        #ifdef USE_HYBRID
-        #pragma omp parallel for schedule(static)
-        #endif
-        for (size_t j=iL+1; j<iM; ++j)
-        {
-            real_t exponent = ZLeft + static_cast<real_t>(j-iL) * dZL;
-            XGrid[j] = std::exp(exponent) / (1.0 + std::exp(exponent));
-        }
-
-        #ifdef USE_HYBRID
-        #pragma omp parallel for schedule(static)
-        #endif
-        for (size_t j=iM+1; j<iR; ++j)
-        {
-            real_t exponent = ZMid + static_cast<real_t>(j-iM) * dZR;
-            XGrid[j] = std::exp(exponent) / (1.0 + std::exp(exponent));
-        }
-
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=iM+1; j<iR; ++j)
+    {
+        real_t exponent = ZMid + static_cast<real_t>(j-iM) * dZR;
+        XGrid[j] = std::exp(exponent) / (1.0 + std::exp(exponent));
     }
 
 }
@@ -484,9 +543,26 @@ real_t NewtonSolver::computeL2Norm(const vec_real& vc)
 
 void NewtonSolver::writeFinalOutput()
 {
-    // Append all to a structured JSON file
-    OutputWriter::appendResultToJson("/home/tjechtl/Documents/Education/TUW/Master_Thesis/parallel-critical-collapse/data/results.json", Dim, Delta, fc, psic, Up);
+    resultDict["Ntau"] = Ntau;
+    resultDict["Dim"] = Dim;
+    resultDict["XLeft"] = XLeft;
+    resultDict["XMid"] = XMid;
+    resultDict["XRight"] = XRight;
+    resultDict["EpsNewton"] = EpsNewton;
+    resultDict["PrecisionNewton"] = TolNewton;
+    resultDict["SlowError"] = slowErr;
+    resultDict["MaxIterNewton"] = maxIts;
+    resultDict["Verbose"] = Verbose;
+    resultDict["Debug"] = Debug;
+    resultDict["Converged"] = Converged;
+    resultDict["NLeft"] = NLeft;
+    resultDict["NRight"] = NRight;
+    resultDict["PrecisionIRK"] = config.PrecisionIRK;
+    resultDict["MaxIterIRK"] = config.MaxIterIRK;
+    resultDict["Initial_Conditions"]["Delta"] = Delta;
+    resultDict["Initial_Conditions"]["fc"] = fc;
+    resultDict["Initial_Conditions"]["psic"] = psic;
+    resultDict["Initial_Conditions"]["Up"] = Up;
 
-    std::cout << "Final result stored under dimension d = " << Dim
-              << " in data/results.json\n";
+    std::cout << "Final result stored in simulation dictionary for dimension D = " << Dim << std::endl; 
 }
