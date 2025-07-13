@@ -54,7 +54,7 @@ def create_sim_input(sim_dict: dict, output_path: Path=OUTPUT_FILE) -> None:
         dims = np.round(np.append(np.arange(first_range, last_range, delta_dims, dtype=np.float64), last_range), decimal_places)
         for dim in dims:
             base_dict = deepcopy(input_dict["SimInput"])
-            base_dict.update({"Dim": dim, "Initial_Condition": {"Delta": 0, "fc": [], "psic": [], "Up":[]}})
+            base_dict.update({"Dim": dim, "Initial_Conditions": {"Delta": 0, "fc": [], "psic": [], "Up":[]}})
             overall_dict[round(dim,3)] = base_dict
     
     with open(output_path.as_posix(), "w") as f:
@@ -64,7 +64,7 @@ def create_sim_input(sim_dict: dict, output_path: Path=OUTPUT_FILE) -> None:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Generate cricital collapse simulation input JSON from a template config.'
+        description='Generate cricital collapse simulation input JSON from template configuration.'
     )
     parser.add_argument(
         '-i', '--input',

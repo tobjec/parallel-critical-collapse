@@ -205,14 +205,17 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
 
         norm2 = std::sqrt(norm2 / (Ntau*stage));
 
-        if (its >= maxIts/2)
+        /* if (its >= maxIts/2)
         {
             precision *= 10.0 * (2.0*static_cast<double>(its)/static_cast<double>(maxIts) - 1.0);
-        }
+        } */
         
         if (norm2 < precision)
         {
-            // Checking inf-norm of difference
+            converged = true;
+            break;
+            
+            /* // Checking inf-norm of difference
             real_t normInf = 0.0;
             #ifdef USE_HYBRID
             #pragma omp parallel for collapse(2) reduction(+:norm2)
@@ -230,7 +233,7 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
             {
                 converged = true;
                 break;
-            }
+            } */
 
         }
         

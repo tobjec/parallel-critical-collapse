@@ -4,9 +4,9 @@
 
 int main(int argc, char* argv[])
 {
-
     bool singleRun = true;
     bool ignoreConverged = false;
+    bool reversed = false;
     std::string inputPath{};
     std::string firstDim{"4.000"};
 
@@ -17,7 +17,7 @@ int main(int argc, char* argv[])
     else
     {
 
-        for (size_t i=1; i<argc; ++i)
+        for (int i=1; i<argc; ++i)
         {
             std::string arg = argv[i];
 
@@ -29,7 +29,7 @@ int main(int argc, char* argv[])
             {
                 singleRun = false;
             }
-            else if (arg == "--ignore-convergence")
+            else if (arg == "--ignore-converged")
             {
                 ignoreConverged = true;
             }
@@ -52,9 +52,17 @@ int main(int argc, char* argv[])
                     firstDim = std::string(argv[i+1]);
                 }
             }
+            else if (arg == "--reversed-order" || arg == "-r")
+            {
+                reversed = true;
+            }
         }
 
     }
+
+    std::filesystem::path dataPath(inputPath);
+    dataPath = std::filesystem::absolute(dataPath);
+    dataPath = dataPath.parent_path();
 
     #if defined(USE_MPI)
     MPI_Init(&argc, &argv);
@@ -82,55 +90,73 @@ int main(int argc, char* argv[])
         // Load configuration
         SimulationConfig config = SimulationConfig::loadFromJson(inputPath);
 
+        if (ignoreConverged) config.Converged = false;
+
         // Instantiate Newton solver with essential parameters
-        NewtonSolver solver(config);
+        NewtonSolver solver(config, dataPath);
 
         // Run solver
         result = solver.run();
         #if defined(USE_MPI) || defined(USE_HYBRID)
         if (rank == 0)
         {
+            std::cout << "Result stored in file: " << inputPath << std::endl;
             OutputWriter::writeJsonToFile(inputPath, result);
         }
-        #else 
+        #else
+        std::cout << "Result stored in file: " << inputPath << std::endl; 
         OutputWriter::writeJsonToFile(inputPath, result);
         #endif
 
     }
     else
     {
-        SimulationSuite configSuite(inputPath, firstDim);
+        SimulationSuite configSuite(inputPath, firstDim, reversed, ignoreConverged);
         
         for (size_t i=0; i<configSuite.simulationDims.size(); ++i)
         {
             std::string simDim = configSuite.simulationDims[i];
             SimulationConfig config = configSuite.generateSimulation(simDim);
-            
+
+            #if defined(USE_MPI) || defined(USE_HYBRID)
+            if (rank==0)
+            {
+                std::cout << "Starting simulation for dimension: " << simDim << std::endl;
+            }
+            #else
+            std::cout << "Starting simulation for dimension: " << simDim << std::endl;
+            #endif
+
             if (i==0)
             {
+                SimulationConfig config_first = configSuite.generateSimulation(firstDim);
+
                 if ((config.fc.empty() || config.Up.empty() || config.psic.empty()) &&
-                    simDim != configSuite.firstDim && configSuite.multiInputDict[firstDim]["Converged"])
+                    simDim != configSuite.firstDim && config_first.Converged)
                 {
-                    config.Delta = configSuite.multiInputDict[firstDim]["Initial_Condition"]["Delta"];
-                    config.fc = configSuite.multiInputDict[firstDim]["Initial_Condition"]["fc"].get<std::vector<real_t>>();
-                    config.Up = configSuite.multiInputDict[firstDim]["Initial_Condition"]["Up"].get<std::vector<real_t>>();
-                    config.psic = configSuite.multiInputDict[firstDim]["Initial_Condition"]["psic"].get<std::vector<real_t>>();
+                    config.Delta = config_first.Delta;
+                    config.fc = config_first.fc;
+                    config.Up = config_first.Up;
+                    config.psic = config_first.psic;
                 }
-                else
+                else if (simDim != configSuite.firstDim && !config_first.Converged)
                 {
                     throw std::runtime_error("No converged solution as initial conditions available for " + simDim + "!");
                 }
+
             }
             else if ((config.fc.empty() || config.Up.empty() || config.psic.empty()) && i>0 && i<3)
             {
                 std::string prevDim = configSuite.simulationDims[i-1];
 
-                if (configSuite.multiInputDict[prevDim]["Converged"])
+                SimulationConfig config_prev = configSuite.generateSimulation(prevDim);
+
+                if (config_prev.Converged)
                 {
-                    config.Delta = configSuite.multiInputDict[prevDim]["Initial_Condition"]["Delta"];
-                    config.fc = configSuite.multiInputDict[prevDim]["Initial_Condition"]["fc"].get<std::vector<real_t>>();
-                    config.Up = configSuite.multiInputDict[prevDim]["Initial_Condition"]["Up"].get<std::vector<real_t>>();
-                    config.psic = configSuite.multiInputDict[prevDim]["Initial_Condition"]["psic"].get<std::vector<real_t>>();
+                    config.Delta = config_prev.Delta;
+                    config.fc = config_prev.fc;
+                    config.Up = config_prev.Up;
+                    config.psic = config_prev.psic;
                 }
                 else
                 {
@@ -143,30 +169,31 @@ int main(int argc, char* argv[])
                 std::string prevDim2 = configSuite.simulationDims[i-2];
                 std::string prevDim3 = configSuite.simulationDims[i-3];
 
-                if (!configSuite.multiInputDict[prevDim1]["Converged"] || !configSuite.multiInputDict[prevDim2]["Converged"]
-                    || !configSuite.multiInputDict[prevDim3]["Converged"])
+                SimulationConfig config_prev1 = configSuite.generateSimulation(prevDim1);
+                SimulationConfig config_prev2 = configSuite.generateSimulation(prevDim2);
+                SimulationConfig config_prev3 = configSuite.generateSimulation(prevDim3);
+
+                if (!config_prev1.Converged || !config_prev2.Converged || !config_prev3.Converged)
                 {
                     throw std::runtime_error("Previous dimensions not converged, hence no initial data for next simulation!");
                 }
 
                 // Collecting all fc
-                vec_real fc1 = configSuite.multiInputDict[prevDim1]["Initial_Condition"]["fc"].get<std::vector<real_t>>();
-                vec_real fc2 = configSuite.multiInputDict[prevDim2]["Initial_Condition"]["fc"].get<std::vector<real_t>>();
-                vec_real fc3 = configSuite.multiInputDict[prevDim3]["Initial_Condition"]["fc"].get<std::vector<real_t>>();
+                vec_real fc1 = config_prev1.fc;
+                vec_real fc2 = config_prev2.fc;
+                vec_real fc3 = config_prev3.fc;
 
                 // Collecting all Up
-                vec_real Up1 = configSuite.multiInputDict[prevDim1]["Initial_Condition"]["Up"].get<std::vector<real_t>>();
-                vec_real Up2 = configSuite.multiInputDict[prevDim2]["Initial_Condition"]["Up"].get<std::vector<real_t>>();
-                vec_real Up3 = configSuite.multiInputDict[prevDim3]["Initial_Condition"]["Up"].get<std::vector<real_t>>();
+                vec_real Up1 = config_prev1.Up;
+                vec_real Up2 = config_prev2.Up;
+                vec_real Up3 = config_prev3.Up;
 
                 // Collecting all psic
-                vec_real psic1 = configSuite.multiInputDict[prevDim1]["Initial_Condition"]["psic"].get<std::vector<real_t>>();
-                vec_real psic2 = configSuite.multiInputDict[prevDim2]["Initial_Condition"]["psic"].get<std::vector<real_t>>();
-                vec_real psic3 = configSuite.multiInputDict[prevDim3]["Initial_Condition"]["psic"].get<std::vector<real_t>>();
+                vec_real psic1 = config_prev1.psic;
+                vec_real psic2 = config_prev2.psic;
+                vec_real psic3 = config_prev3.psic;
 
-                vec_real Deltas = {configSuite.multiInputDict[prevDim1]["Initial_Condition"]["Delta"],
-                                   configSuite.multiInputDict[prevDim2]["Initial_Condition"]["Delta"],
-                                   configSuite.multiInputDict[prevDim3]["Initial_Condition"]["Delta"]};
+                vec_real Deltas = {config_prev1.Delta, config_prev2.Delta, config_prev3.Delta};
                 
                 // To be extrapolated values
                 vec_real fc(fc1.size(),0), Up(Up1.size(),0), psic(psic1.size(),0);
@@ -174,19 +201,19 @@ int main(int argc, char* argv[])
                 vec_real dims = {std::stod(prevDim1), std::stod(prevDim2), std::stod(prevDim3)};
                 real_t curr_dim = std::stod(simDim);
                 
-                for (size_t i=0; i<fc1.size(); ++i)
+                for (size_t j=0; j<fc1.size(); ++j)
                 {
-                    vec_real y_fc = {fc1[i], fc2[i], fc3[i]};
-                    vec_real y_Up = {Up1[i], Up2[i], Up3[i]};
-                    vec_real y_psic = {psic1[i], psic2[i], psic3[i]};
+                    vec_real y_fc = {fc1[j], fc2[j], fc3[j]};
+                    vec_real y_Up = {Up1[j], Up2[j], Up3[j]};
+                    vec_real y_psic = {psic1[j], psic2[j], psic3[j]};
                     
                     vec_real coeff_fc = fit_quadratic_least_squares(dims, y_fc);
                     vec_real coeff_Up = fit_quadratic_least_squares(dims, y_Up);
                     vec_real coeff_psic = fit_quadratic_least_squares(dims, y_psic);
 
-                    fc[i] = coeff_fc[0]*curr_dim*curr_dim + coeff_fc[1]*curr_dim + coeff_fc[2];
-                    Up[i] = coeff_Up[0]*curr_dim*curr_dim + coeff_Up[1]*curr_dim + coeff_Up[2]; 
-                    psic[i] = coeff_psic[0]*curr_dim*curr_dim + coeff_psic[1]*curr_dim + coeff_psic[2];
+                    fc[j] = coeff_fc[0]*curr_dim*curr_dim + coeff_fc[1]*curr_dim + coeff_fc[2];
+                    Up[j] = coeff_Up[0]*curr_dim*curr_dim + coeff_Up[1]*curr_dim + coeff_Up[2]; 
+                    psic[j] = coeff_psic[0]*curr_dim*curr_dim + coeff_psic[1]*curr_dim + coeff_psic[2];
                 }
 
                 vec_real coeff_Delta = fit_quadratic_least_squares(dims, Deltas);
@@ -198,27 +225,34 @@ int main(int argc, char* argv[])
                 config.psic = psic;
 
             }
+
+            if (ignoreConverged) config.Converged = false;
             
-            NewtonSolver solver(config);
+            NewtonSolver solver(config, dataPath);
             configSuite.multiInputDict[simDim] = solver.run();
             #if defined(USE_MPI) || defined(USE_HYBRID)
             if (rank == 0)
             {
+                std::cout << "Result stored in file: " << inputPath << std::endl;
                 OutputWriter::writeJsonToFile(inputPath, configSuite.multiInputDict);
             }
-            #else 
+            MPI_Barrier(MPI_COMM_WORLD);
+            #else
+            std::cout << "Result stored in file: " << inputPath << std::endl; 
             OutputWriter::writeJsonToFile(inputPath, configSuite.multiInputDict);
             #endif
         }
     }
 
-    
-
     #if defined(USE_MPI) || defined(USE_HYBRID)
+    if (rank==0)
+    {
+        std::cout << "Simulation finished successfully." << std::endl;
+    }
     MPI_Finalize();
+    #else
+    std::cout << "Simulation finished successfully." << std::endl;
     #endif
-
-    std::cout << "Simulation finished successfully.\n";
 
     return EXIT_SUCCESS;
 }

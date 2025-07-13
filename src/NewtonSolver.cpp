@@ -1,11 +1,11 @@
 #include "NewtonSolver.hpp"
 
-NewtonSolver::NewtonSolver(SimulationConfig configIn)
+NewtonSolver::NewtonSolver(SimulationConfig configIn, std::filesystem::path dataPathIn)
     : config(configIn), Ntau(configIn.Ntau), Nnewton(3*configIn.Ntau/4), maxIts(configIn.MaxIterNewton), Dim(configIn.Dim),
       Delta(configIn.Delta), slowErr(configIn.SlowError), EpsNewton(configIn.EpsNewton), TolNewton(configIn.PrecisionNewton),
       XLeft(configIn.XLeft), XMid(configIn.XMid), XRight(configIn.XRight), NLeft(configIn.NLeft), NRight(configIn.NRight),
       iL(0), iM(configIn.NLeft), iR(configIn.NLeft+configIn.NRight), Debug(configIn.Debug), Verbose(configIn.Verbose),
-      Converged(configIn.Converged), initGen(configIn.Ntau, configIn.Dim, configIn.Delta)
+      Converged(configIn.Converged), initGen(configIn.Ntau, configIn.Dim, configIn.Delta), baseFolder(dataPathIn)
 {
     fc = configIn.fc;
     psic = configIn.psic;
@@ -26,10 +26,7 @@ NewtonSolver::NewtonSolver(SimulationConfig configIn)
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     MPI_Type_contiguous(Nnewton, MPI_DOUBLE, &mpi_contiguous_t);
-    MPI_Type_vector(Nnewton, 1, Nnewton, MPI_DOUBLE, &mpi_column_t_unresized);
-    MPI_Type_create_resized(mpi_column_t_unresized, 0, sizeof(real_t), &mpi_column_t);
     MPI_Type_commit(&mpi_contiguous_t);
-    MPI_Type_commit(&mpi_column_t);
     #endif
 }
 
@@ -37,7 +34,6 @@ NewtonSolver::NewtonSolver(SimulationConfig configIn)
 NewtonSolver::~NewtonSolver()
 {
     MPI_Type_free(&mpi_contiguous_t);
-    MPI_Type_free(&mpi_column_t);
 }
 
 json NewtonSolver::run()
@@ -47,6 +43,7 @@ json NewtonSolver::run()
         real_t err = 1.0;
         real_t fac = 1.0;
         real_t errOld = 1.0;
+        json fieldVals;
 
         initGen.packSpectralFields(Up, psic, fc, in0);
         in0[2*Nnewton/3+2] = Delta;
@@ -56,20 +53,27 @@ json NewtonSolver::run()
         {
             if (rank==0)
             {
-                std::cout << "Newton iteration: " << its + 1 << std::endl;
+                std::cout << "Newton iteration: " << its+1 << std::endl;
 
                 errOld = err;
 
-                shoot(in0, out0);
+                if (Debug)
+                {
+                    shoot(in0, out0, &fieldVals);
+                    auto fieldPath = baseFolder / ("fields_"+std::to_string(Dim)+"_"+std::to_string(its)+".json");
+                    OutputWriter::writeJsonToFile(fieldPath.c_str(), fieldVals);
+                }
+                else
+                {
+                    shoot(in0, out0);
+                }
 
                 err = computeL2Norm(out0);
                 std::cout << "Mismatch norm: " << err << std::endl;
 
                 if (err<TolNewton)
                 {
-                    Converged = true;
                     std::cout << "The solution has converged!" << std::endl;
-                    writeFinalOutput();
                 }
 
             }
@@ -82,6 +86,12 @@ json NewtonSolver::run()
 
             if (err<TolNewton)
             {
+                Converged=true;
+                MPI_Bcast(in0.data(), 1, mpi_contiguous_t, 0, MPI_COMM_WORLD);
+                Delta = in0[2*Nnewton/3+2];
+                in0[2*Nnewton/3+2] = 0.0;
+                initGen.unpackSpectralFields(in0, Up, psic, fc);
+                writeFinalOutput();
                 break;
             }
             else
@@ -103,6 +113,12 @@ json NewtonSolver::run()
 
             if (rank==0)
             {
+                if (Debug)
+                {
+                    auto jacPath = baseFolder / ("jacobian_"+std::to_string(Dim)+"_"+std::to_string(its+1)+".csv");
+                    OutputWriter::writeMatrix(jacPath.c_str(), J);
+                }
+
                 // Solving J dx = -out0
                 vec_real dx(Nnewton);
                 vec_real rhs = out0;
@@ -122,7 +138,7 @@ json NewtonSolver::run()
         }
         if (rank==0 && !Converged)
         {
-            std::cerr << "Newton method did not converge in " << maxIts << " iterations." << std::endl;
+            std::cerr << "Newton method did not converge in " << maxIts << " iterations. For Dim: " << Dim << std::endl;
         }
         if (!Converged)
         {
@@ -134,9 +150,9 @@ json NewtonSolver::run()
     {
         if (rank==0)
         {
-            std::cout << "The solution is already marked as converged!" << std::endl;
-            writeFinalOutput();
+            std::cout << "The solution is already marked as converged!" << std::endl;   
         }
+        writeFinalOutput();
 
     }
 
@@ -152,6 +168,7 @@ json NewtonSolver::run()
         real_t fac = 1.0;
         real_t err = 1.0;
         real_t errOld = 1.0;
+        json fieldVals;
 
         initGen.packSpectralFields(Up, psic, fc, in0);
         in0[2*Nnewton/3+2] = Delta;
@@ -159,9 +176,20 @@ json NewtonSolver::run()
 
         for (size_t its=0; its<maxIts; ++its)
         {
-            std::cout << "Newton iteration: " << its + 1 << std::endl;
+            std::cout << "Newton iteration: " << its+1 << std::endl;
 
             errOld = err;
+
+            if (Debug)
+            {
+                shoot(in0, out0, &fieldVals);
+                auto fieldPath = baseFolder / ("fields_"+std::to_string(Dim)+"_"+std::to_string(its)+".json");
+                OutputWriter::writeJsonToFile(fieldPath.c_str(), fieldVals);
+            }
+            else
+            {
+                shoot(in0, out0);
+            }
 
             shoot(in0, out0);
 
@@ -187,8 +215,11 @@ json NewtonSolver::run()
             mat_real J(Nnewton, vec_real(Nnewton));
             assembleJacobian(in0, out0, J);
 
-            write_mat("/home/tjechtl/Documents/Education/TUW/Master_Thesis/parallel-critical-collapse/data/jacobian_4D_1_serial_new.csv", J);
-            //write_vec("/home/tjechtl/Documents/Education/TUW/Master_Thesis/parallel-critical-collapse/data/test_4D_1.csv",out0);
+            if (Debug)
+            {
+                auto jacPath = baseFolder / ("jacobian_"+std::to_string(Dim)+"_"+std::to_string(its+1)+".csv");
+                OutputWriter::writeMatrix(jacPath.c_str(), J);
+            }
 
             // Solving J dx = -out0
             vec_real dx(Nnewton);
@@ -208,7 +239,7 @@ json NewtonSolver::run()
 
         if (!Converged)
         {
-            std::cerr << "Newton method did not converge in " << maxIts << " iterations." << std::endl;
+            std::cerr << "Newton method did not converge in " << maxIts << " iterations. For dimension: " << Dim << std::endl;
             std::exit(EXIT_FAILURE);
         }
         
@@ -224,7 +255,7 @@ json NewtonSolver::run()
 
 #endif
 
-void NewtonSolver::shoot(vec_real& inputVec, vec_real& outputVec)
+void NewtonSolver::shoot(vec_real& inputVec, vec_real& outputVec, json* fieldVals)
 {
     vec_real U(Ntau), V(Ntau), F(Ntau);
 
@@ -236,10 +267,10 @@ void NewtonSolver::shoot(vec_real& inputVec, vec_real& outputVec)
     inputVec[2*Nnewton/3+2] = Delta;
 
     // Initialize input for shooting
-    initializeInput();
+    initializeInput(Verbose);
 
     // Shooting from left and right side
-    shooter->shoot(YLeft, YRight, XGrid, iL, iR, iM, mismatchOut);
+    shooter->shoot(YLeft, YRight, XGrid, iL, iR, iM, mismatchOut, Debug, fieldVals);
     
     // Packing state vector to fields
     initGen.StateVectorToFields(mismatchOut, U, V, F);
@@ -271,10 +302,10 @@ void NewtonSolver::shoot(vec_real& inputVec, vec_real& outputVec, ShootingSolver
     inputVec[2*Nnewton/3+2] = Delta_local;
 
     // Initialize input for shooting
-    initializeInput(initGen_local, YLeft_local, YRight_local, Up_local, psic_local, fc_local, Delta_local);
+    initializeInput(initGen_local, YLeft_local, YRight_local, Up_local, psic_local, fc_local, Delta_local, Verbose);
 
     // Shooting from left and right side
-    shooter_local.shoot(YLeft_local, YRight_local, XGrid, iL, iR, iM, mismatchOut_local);
+    shooter_local.shoot(YLeft_local, YRight_local, XGrid, iL, iR, iM, mismatchOut_local, false);
     
     // Packing state vector to fields
     initGen_local.StateVectorToFields(mismatchOut_local, U, V, F);
@@ -554,7 +585,7 @@ void NewtonSolver::writeFinalOutput()
     resultDict["MaxIterNewton"] = maxIts;
     resultDict["Verbose"] = Verbose;
     resultDict["Debug"] = Debug;
-    resultDict["Converged"] = Converged;
+    resultDict["Converged"] = true;
     resultDict["NLeft"] = NLeft;
     resultDict["NRight"] = NRight;
     resultDict["PrecisionIRK"] = config.PrecisionIRK;
@@ -564,5 +595,12 @@ void NewtonSolver::writeFinalOutput()
     resultDict["Initial_Conditions"]["psic"] = psic;
     resultDict["Initial_Conditions"]["Up"] = Up;
 
-    std::cout << "Final result stored in simulation dictionary for dimension D = " << Dim << std::endl; 
+    #if defined(USE_MPI) || defined(USE_HYBRID)
+    if (rank==0)
+    {
+        std::cout << "Final result stored in simulation dictionary for dimension D = " << Dim << "." << std::endl;
+    }
+    #else
+    std::cout << "Final result stored in simulation dictionary for dimension D = " << Dim << "." << std::endl;
+    #endif
 }

@@ -122,7 +122,7 @@ vec_real fit_quadratic_least_squares(const vec_real& x_vals, const vec_real& y_v
     const lapack_int n = 3; 
     const lapack_int nrhs = 1;
     const lapack_int lda = n;
-    const lapack_int ldb = n;
+    const lapack_int ldb = nrhs;
 
     vec_real A = build_design_matrix(x_vals[0], x_vals[1], x_vals[2]);
     vec_real b = y_vals;

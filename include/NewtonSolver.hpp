@@ -21,12 +21,13 @@ class NewtonSolver
         vec_complex YLeft, YRight, mismatchOut;
         vec_real fc, psic, Up, XGrid, in0, out0;
         json resultDict;
+        std::filesystem::path baseFolder;
     
         std::unique_ptr<ShootingSolver> shooter;
     
         void initializeInput(bool printDiagnostics=false);
         void generateGrid();
-        void shoot(vec_real& inputVec, vec_real& outputVec);
+        void shoot(vec_real& inputVec, vec_real& outputVec, json* fieldVals=nullptr);
         
         #ifdef USE_OPENMP
         void initializeInput(InitialConditionGenerator& initGen_local, vec_complex& YLeft_local, vec_complex& YRight_local,
@@ -38,7 +39,7 @@ class NewtonSolver
 
         #if defined(USE_MPI) || defined(USE_HYBRID)
         int size, rank;
-        MPI_Datatype mpi_contiguous_t, mpi_column_t, mpi_contiguous_t_unresized, mpi_column_t_unresized;
+        MPI_Datatype mpi_contiguous_t;
         void assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput,
                               mat_real& jacobian);
         void solveLinearSystem(mat_real& A, vec_real& rhs, vec_real& dx);
@@ -51,7 +52,7 @@ class NewtonSolver
         real_t computeL2Norm(const vec_real& vc);
 
     public:
-        NewtonSolver(SimulationConfig configIn);
+        NewtonSolver(SimulationConfig configIn, std::filesystem::path dataPathIn);
 
         #if defined(USE_MPI) || defined(USE_HYBRID)
         ~NewtonSolver();

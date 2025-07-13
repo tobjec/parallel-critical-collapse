@@ -33,10 +33,26 @@ struct SimulationConfig
         NRight = simConfigIn["NRight"];
         PrecisionIRK = simConfigIn["PrecisionIRK"];
         MaxIterIRK = simConfigIn["MaxIterIRK"];
-        Delta = simConfigIn["Initial_Conditions"]["Delta"];
-        fc = simConfigIn["Initial_Conditions"]["fc"].get<std::vector<real_t>>();
-        psic = simConfigIn["Initial_Conditions"]["psic"].get<std::vector<real_t>>();
-        Up = simConfigIn["Initial_Conditions"]["Up"].get<std::vector<real_t>>();
+
+        if (!simConfigIn["Initial_Conditions"]["Delta"].is_null())
+        {
+            Delta = simConfigIn["Initial_Conditions"]["Delta"];
+        }
+
+        if (!simConfigIn["Initial_Conditions"]["fc"].is_null())
+        {
+           fc = simConfigIn["Initial_Conditions"]["fc"].get<vec_real>();
+        }
+
+        if (!simConfigIn["Initial_Conditions"]["psic"].is_null())
+        {
+           psic = simConfigIn["Initial_Conditions"]["psic"].get<vec_real>();
+        }
+
+        if (!simConfigIn["Initial_Conditions"]["Up"].is_null())
+        {
+           Up = simConfigIn["Initial_Conditions"]["Up"].get<vec_real>();
+        }
     }
 
     static SimulationConfig loadFromJson(const std::string& filename)
@@ -59,6 +75,31 @@ struct SimulationConfig
         file << simRes;
 
     }
+
+    void print_config()
+    {
+        std::cout << "Simulation configuration:" << std::endl;
+        std::cout << "Ntau: " << Ntau << std::endl;
+        std::cout << "Dim: " << Dim << std::endl;
+        std::cout << "XLeft: " << XLeft << std::endl;
+        std::cout << "XMid: " << XMid << std::endl;
+        std::cout << "XRight: " << XRight << std::endl;
+        std::cout << "EpsNewton: " << EpsNewton << std::endl;
+        std::cout << "PrecisionNewton: " << PrecisionNewton << std::endl;
+        std::cout << "SlowError: " << SlowError << std::endl;
+        std::cout << "MaxIterNewton: " << MaxIterNewton << std::endl;
+        std::cout << "Verbose: " << Verbose << std::endl;
+        std::cout << "Debug: " << Debug << std::endl;
+        std::cout << "Converged: " << Converged << std::endl;
+        std::cout << "NLeft: " << NLeft << std::endl;
+        std::cout << "NRight: " << NRight << std::endl;
+        std::cout << "PrecisionIRK: " << PrecisionIRK << std::endl;
+        std::cout << "MaxIterIRK: " << MaxIterIRK << std::endl;
+        std::cout << "Delta: " << Delta << std::endl;
+        std::cout << "fc is not empty: " << !fc.empty() << std::endl;
+        std::cout << "psic is not empty: " << !psic.empty() << std::endl;
+        std::cout << "Up is not empty: " << !Up.empty() << std::endl;
+    }
 };
 
 struct SimulationSuite
@@ -67,7 +108,7 @@ struct SimulationSuite
     std::string firstDim;
     std::vector<std::string> simulationDims;
 
-    SimulationSuite(const std::string& filePath, std::string firstDimIn="4.000", bool reversed=false)
+    SimulationSuite(const std::string& filePath, std::string firstDimIn="4.000", bool reversed=false, bool ignoreConverged=false)
     {
         if (!std::filesystem::exists(filePath))
         {
@@ -81,10 +122,22 @@ struct SimulationSuite
 
         for (const auto& dim : multiInputDict.items())
         {
-            if (!dim.value()["Converged"])
+            if (!ignoreConverged)
+            {
+                if (!dim.value()["Converged"] && !ignoreConverged)
+                {
+                    simulationDims.push_back(dim.key());
+                }
+                else
+                {
+                    firstDim = (dim.key() < firstDim) ? dim.key() : firstDim;
+                }
+            }
+            else
             {
                 simulationDims.push_back(dim.key());
             }
+            
         }
         
         if (reversed)

@@ -7,10 +7,10 @@ ShootingSolver::ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, Initia
 }
 
 void ShootingSolver::shoot(vec_complex& YLeft, vec_complex& YRight, const vec_real& gridX,
-    size_t iLeft, size_t iRight, size_t iMid, vec_complex& mismatchOut)
+    size_t iLeft, size_t iRight, size_t iMid, vec_complex& mismatchOut, bool Debug, json* fieldVals)
 {
-    integrateToMidpoint(YLeft, gridX, iLeft, iMid, true, YLeft);
-    integrateToMidpoint(YRight, gridX, iRight, iMid, false, YRight);
+    integrateToMidpoint(YLeft, gridX, iLeft, iMid, true, YLeft, Debug, fieldVals);
+    integrateToMidpoint(YRight, gridX, iRight, iMid, false, YRight, Debug, fieldVals);
 
     computeMismatch(YLeft, YRight, mismatchOut);
 }
@@ -18,10 +18,11 @@ void ShootingSolver::shoot(vec_complex& YLeft, vec_complex& YRight, const vec_re
 void ShootingSolver::integrateToMidpoint(
     const vec_complex& Yinit, const vec_real& xGrid,
     size_t startIdx, size_t endIdx, bool forward,
-    vec_complex& Yfinal)
+    vec_complex& Yfinal, bool Debug, json* fieldVals)
 {
     vec_complex Y1=Yinit, Y2=Yinit;
-
+    vec_real A(Ntau), U(Ntau), V(Ntau), f(Ntau), dUdt(Ntau), dVdt(Ntau), dFdt(Ntau); 
+    
     if (forward)
     {
         for (size_t i=startIdx; i<endIdx; ++i)
@@ -33,6 +34,18 @@ void ShootingSolver::integrateToMidpoint(
                 std::cerr << "ERROR: No convergence between grid point " << xGrid[i] << " (" << i << ") ";
                 std::cerr << " and " << xGrid[i+1] << " (" << i+1 << ") " << std::endl;
                 std::exit(EXIT_FAILURE);
+            }
+
+            if ((Debug && i%100==0) || (Debug && i==(endIdx-1)))
+            {
+                initGen.StateVectorToFields(Y1, U, V, f, A, dUdt, dVdt, dFdt, xGrid[i]); 
+                
+                std::for_each(A.begin(), A.end(), [](auto& ele){ele=std::sqrt(1/ele);});
+
+                (*fieldVals)[xGrid[i]]["A"] = A;
+                (*fieldVals)[xGrid[i]]["U"] = U;
+                (*fieldVals)[xGrid[i]]["V"] = V;
+                (*fieldVals)[xGrid[i]]["f"] = f;
             }
 
             Y1 = Y2;
@@ -51,6 +64,18 @@ void ShootingSolver::integrateToMidpoint(
                 std::cerr << "ERROR: No convergence between grid point " << xGrid[i] << " (" << i << ") ";
                 std::cerr << " and " << xGrid[i-1] << " (" << i-1 << ") " << std::endl;
                 std::exit(EXIT_FAILURE);
+            }
+
+            if ((Debug && i%100==0) || (Debug && i==(endIdx+1)) || (Debug && i==startIdx))
+            {
+                initGen.StateVectorToFields(Y1, U, V, f, A, dUdt, dVdt, dFdt, xGrid[i]); 
+                
+                std::for_each(A.begin(), A.end(), [](auto& ele){ele=std::sqrt(1/ele);});
+
+                (*fieldVals)[xGrid[i]]["A"] = A;
+                (*fieldVals)[xGrid[i]]["U"] = U;
+                (*fieldVals)[xGrid[i]]["V"] = V;
+                (*fieldVals)[xGrid[i]]["f"] = f;
             }
 
             Y1 = Y2;
