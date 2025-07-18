@@ -55,7 +55,7 @@ def create_sim_input(sim_dict: dict, output_path: Path=OUTPUT_FILE) -> None:
         for dim in dims:
             base_dict = deepcopy(input_dict["SimInput"])
             base_dict.update({"Dim": dim, "Initial_Conditions": {"Delta": 0, "fc": [], "psic": [], "Up":[]}})
-            overall_dict[round(dim,3)] = base_dict
+            overall_dict[f'{dim:.3f}'] = base_dict
     
     with open(output_path.as_posix(), "w") as f:
         json.dump(overall_dict, f)

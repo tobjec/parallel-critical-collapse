@@ -119,18 +119,25 @@ struct SimulationSuite
 
         std::ifstream inputFile(filePath);
         inputFile >> multiInputDict;
+        std::vector<std::string> convergedDims;
 
         for (const auto& dim : multiInputDict.items())
         {
             if (!ignoreConverged)
             {
-                if (!dim.value()["Converged"] && !ignoreConverged)
+                if (!dim.value()["Converged"])
                 {
                     simulationDims.push_back(dim.key());
                 }
-                else
+                else if (!reversed)
                 {
                     firstDim = (dim.key() < firstDim) ? dim.key() : firstDim;
+                    convergedDims.push_back(dim.key());
+                }
+                else
+                {
+                    firstDim = (dim.key() > firstDim) ? dim.key() : firstDim;
+                    convergedDims.push_back(dim.key());
                 }
             }
             else
@@ -140,7 +147,42 @@ struct SimulationSuite
             
         }
         
-        if (reversed)
+        if (reversed && !ignoreConverged)
+        {
+            std::sort(simulationDims.begin(), simulationDims.end());
+
+            if (convergedDims.size() > 0)
+            {
+                std::sort(convergedDims.begin(), convergedDims.end());
+                if (convergedDims.size() > 3)
+                {
+                    simulationDims.insert(simulationDims.begin(), convergedDims.end()-3, convergedDims.end()); 
+                }
+                else
+                {
+                    simulationDims.insert(simulationDims.begin(), convergedDims.begin(), convergedDims.end());
+                }
+            }
+
+        }
+        else if (!ignoreConverged)
+        {
+            std::sort(simulationDims.begin(), simulationDims.end(), [](auto& a, auto& b){return a>b;});
+
+            if (convergedDims.size() > 0)
+            {
+                std::sort(convergedDims.begin(), convergedDims.end(), [](auto& a, auto& b){return a>b;});
+                if (convergedDims.size() > 3)
+                {
+                    simulationDims.insert(simulationDims.begin(), convergedDims.end()-3, convergedDims.end());
+                }
+                else
+                {
+                    simulationDims.insert(simulationDims.begin(), convergedDims.begin(), convergedDims.end());
+                }
+            }
+        }
+        else if(reversed)
         {
             std::sort(simulationDims.begin(), simulationDims.end());
         }
