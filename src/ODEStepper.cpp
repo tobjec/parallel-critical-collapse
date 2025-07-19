@@ -124,7 +124,7 @@ void ODEStepper::integrate(vec_complex& Yin, vec_complex& Yout,
     }
 }
 
-// === IRK
+// IRK
 void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
                          real_t Xin, real_t Xout, int& itsReached,
                          bool& converged, int maxIts)

@@ -7,16 +7,12 @@ int main(int argc, char* argv[])
     bool singleRun = true;
     bool ignoreConverged = false;
     bool reversed = false;
-    std::string inputPath{};
-    std::string firstDim{"4.000"};
+    bool benchmark = false;
+    int benchmark_repetitions = 5;
+    std::string inputPath{"data/simulation_4D.json"};
 
-    if (argc<2)
+    if (argc>1)
     {
-        inputPath = "../data/simulation_4D.json";
-    }
-    else
-    {
-
         for (int i=1; i<argc; ++i)
         {
             std::string arg = argv[i];
@@ -45,16 +41,21 @@ int main(int argc, char* argv[])
                     throw std::invalid_argument("Invalid simulation input path!");
                 }
             }
-            else if (arg == "--first-dim" || arg == "-d")
-            {
-                if (i+1 < argc)
-                {
-                    firstDim = std::string(argv[i+1]);
-                }
-            }
             else if (arg == "--reversed-order" || arg == "-r")
             {
                 reversed = true;
+            }
+            else if (arg == "--benchmark" || arg== "-b")
+            {
+                benchmark = true;
+            }
+            else if (arg == "--benchmark-repetitions")
+            {
+                benchmark = true;
+                if (i+1 < argc)
+                {
+                    benchmark_repetitions =  std::stoi(argv[i+1]);
+                }
             }
         }
 
@@ -90,7 +91,83 @@ int main(int argc, char* argv[])
 
     try
     {
-        if (singleRun)
+        if (benchmark)
+        {
+            json benchmark_results;
+            SimulationConfig config = SimulationConfig::loadFromJson(inputPath);
+
+            if (ignoreConverged) config.Converged = false;
+
+            benchmark_results["Dim"] = config.Dim;
+            benchmark_results["Ntau"] = config.Ntau;
+            benchmark_results["XLeft"] = config.XLeft;
+            benchmark_results["XMid"] = config.XMid;
+            benchmark_results["XRight"] = config.XRight;
+            benchmark_results["PrecisionNewton"] = config.PrecisionNewton;
+            benchmark_results["NLeft"] = config.NLeft;
+            benchmark_results["NRight"] = config.NRight;
+            benchmark_results["Repetitions"] = benchmark_repetitions;
+
+            #if defined(USE_MPI)
+            benchmark_results["Kind"] = "MPI";
+            benchmark_results["Cores"] = size;
+            auto benchmarkOutputPath = dataPath / ("benchmark_D=" + std::to_string(config.Dim) 
+                                       + "_MPI_" + std::to_string(size) + ".json"); 
+            #elif defined(USE_HYBRID)
+            benchmark_results["Kind"] = "Hybrid";
+            benchmark_results["Cores"] = size;
+            benchmark_results["Threads"] = omp_get_max_threads();
+            auto benchmarkOutputPath = dataPath / ("benchmark_D=" + std::to_string(config.Dim) 
+                                       + "_Hybrid_" + std::to_string(size)+ "_" 
+                                       + std::to_string(omp_get_max_threads()) + ".json");
+            #elif defined(USE_OPENMP)
+            benchmark_results["Kind"] = "OpenMP";
+            benchmark_results["Threads"] = omp_get_max_threads();
+            auto benchmarkOutputPath = dataPath / ("benchmark_D=" + std::to_string(config.Dim) 
+                                       + "_OpenMP_" + std::to_string(omp_get_max_threads()) + ".json");
+            #else
+            benchmark_results["Kind"] = "Serial";
+            benchmark_results["Cores"] = 1;
+            auto benchmarkOutputPath = dataPath / ("benchmark_D=" + std::to_string(config.Dim) 
+                                       + "_Serial.json");
+            #endif
+
+            #if defined(USE_MPI) || defined(USE_HYBRID)
+            if (rank==0)
+            {
+                std::cout << "Starting benchmark run for D=" << config.Dim << "." << std::endl << std::endl;
+            }
+            #else
+            std::cout << "Starting benchmark run for D=" << config.Dim << "." << std::endl << std::endl;
+            #endif
+
+            for (int i=0; i<benchmark_repetitions; ++i)
+            {
+                #if defined(USE_MPI) || defined(USE_HYBRID)
+                if (rank==0)
+                {
+                    std::cout << "Repetition " << i+1 << "/" << benchmark_repetitions << std::endl << std::endl;
+                }
+                #else
+                std::cout << "Repetition " << i+1 << "/" << benchmark_repetitions << std::endl << std::endl;
+                #endif
+                NewtonSolver solver(config, dataPath, benchmark);
+                solver.run(&benchmark_results[std::to_string(i)]);
+            }
+            
+            #if defined(USE_MPI) || defined(USE_HYBRID)
+            if (rank == 0)
+            {
+                std::cout << "Benchmark result stored in file: " << benchmarkOutputPath << std::endl << std::endl;
+                OutputWriter::writeJsonToFile(benchmarkOutputPath.c_str(), benchmark_results);
+            }
+            #else
+            std::cout << "Benchmark result stored in file: " << benchmarkOutputPath << std::endl << std::endl; 
+            OutputWriter::writeJsonToFile(benchmarkOutputPath.c_str(), benchmark_results);
+            #endif
+
+        }
+        else if (singleRun)
         {
             json result;
             // Load configuration
@@ -126,7 +203,7 @@ int main(int argc, char* argv[])
         }
         else
         {
-            SimulationSuite configSuite(inputPath, firstDim, reversed, ignoreConverged);
+            SimulationSuite configSuite(inputPath, reversed, ignoreConverged);
 
             #if defined(USE_MPI) || defined(USE_HYBRID)
             if (rank==0)
@@ -153,23 +230,9 @@ int main(int argc, char* argv[])
                 std::cout << "Starting simulation for D=" << simDim << "." << std::endl << std::endl;
                 #endif
 
-                if (i==0)
+                if ((config.fc.empty() || config.Up.empty() || config.psic.empty()) && i==0)
                 {
-                    SimulationConfig config_first = configSuite.generateSimulation(firstDim);
-
-                    if ((config.fc.empty() || config.Up.empty() || config.psic.empty()) &&
-                        simDim != configSuite.firstDim && config_first.Converged)
-                    {
-                        config.Delta = config_first.Delta;
-                        config.fc = config_first.fc;
-                        config.Up = config_first.Up;
-                        config.psic = config_first.psic;
-                    }
-                    else if (simDim != configSuite.firstDim && !config_first.Converged)
-                    {
-                        throw std::runtime_error("No converged solution as initial conditions available for " + simDim + "!");
-                    }
-
+                    throw std::runtime_error("No converged solution as initial conditions available for " + simDim + "!");
                 }
                 else if ((config.fc.empty() || config.Up.empty() || config.psic.empty()) && i>0 && i<3)
                 {
@@ -259,12 +322,12 @@ int main(int argc, char* argv[])
                 #if defined(USE_MPI) || defined(USE_HYBRID)
                 if (rank == 0)
                 {
-                    std::cout << "Result stored in file: " << inputPath << std::endl;
+                    std::cout << "Result stored in file: " << inputPath << std::endl << std::endl;
                     OutputWriter::writeJsonToFile(inputPath, configSuite.multiInputDict);
                 }
                 MPI_Barrier(MPI_COMM_WORLD);
                 #else
-                std::cout << "Result stored in file: " << inputPath << std::endl; 
+                std::cout << "Result stored in file: " << inputPath << std::endl << std::endl; 
                 OutputWriter::writeJsonToFile(inputPath, configSuite.multiInputDict);
                 #endif
             }
@@ -273,11 +336,11 @@ int main(int argc, char* argv[])
         #if defined(USE_MPI) || defined(USE_HYBRID)
         if (rank==0)
         {
-            std::cout << "Simulation finished successfully." << std::endl;
+            std::cout << "Simulation finished successfully." << std::endl << std::endl;
         }
         MPI_Finalize();
         #else
-        std::cout << "Simulation finished successfully." << std::endl;
+        std::cout << "Simulation finished successfully." << std::endl << std::endl;
         #endif
 
         return 0;

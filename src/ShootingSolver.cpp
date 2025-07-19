@@ -31,9 +31,17 @@ void ShootingSolver::integrateToMidpoint(
 
             if (!converged)
             {
+                #if defined(USE_MPI) || defined(USE_HYBRID)
+                int rank;
+                MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+                std::cerr << "ERROR for rank:" << rank << ", no convergence between grid point " << xGrid[i] << " (" << i << ") ";
+                std::cerr << " and " << xGrid[i+1] << " (" << i+1 << ") " << std::endl;
+                MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+                #else
                 std::cerr << "ERROR: No convergence between grid point " << xGrid[i] << " (" << i << ") ";
                 std::cerr << " and " << xGrid[i+1] << " (" << i+1 << ") " << std::endl;
                 std::exit(EXIT_FAILURE);
+                #endif
             }
 
             if ((Debug && i%100==0) || (Debug && i==(endIdx-1)))
@@ -61,9 +69,17 @@ void ShootingSolver::integrateToMidpoint(
 
             if (!converged)
             {
+                #if defined(USE_MPI) || defined(USE_HYBRID)
+                int rank;
+                MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+                std::cerr << "ERROR for rank:" << rank << ", no convergence between grid point " << xGrid[i] << " (" << i << ") ";
+                std::cerr << " and " << xGrid[i-1] << " (" << i-1 << ") " << std::endl;
+                MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+                #else
                 std::cerr << "ERROR: No convergence between grid point " << xGrid[i] << " (" << i << ") ";
                 std::cerr << " and " << xGrid[i-1] << " (" << i-1 << ") " << std::endl;
                 std::exit(EXIT_FAILURE);
+                #endif
             }
 
             if ((Debug && i%100==0) || (Debug && i==(endIdx+1)) || (Debug && i==startIdx))
@@ -97,7 +113,15 @@ void ShootingSolver::computeMismatch(
 
     if (mismatchOut[2].real() > Precision)
     {
-        std::cout << "Mismatch in Delta from left and right side!!!" << std::endl;
+         #if defined(USE_MPI) || defined(USE_HYBRID)
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        std::cerr << "ERROR for rank:" << rank << ", mismatch in Delta from left and right side!!!" << std::endl;
+        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+        #else
+        std::cerr << "Mismatch in Delta from left and right side!!!" << std::endl;
+        std::exit(EXIT_FAILURE);
+        #endif
     }
 
     // Enforce consistency of Delta value

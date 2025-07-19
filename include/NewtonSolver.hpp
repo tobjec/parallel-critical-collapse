@@ -22,6 +22,7 @@ class NewtonSolver
         vec_real fc, psic, Up, XGrid, in0, out0;
         json resultDict;
         std::filesystem::path baseFolder;
+        bool benchmark;
     
         std::unique_ptr<ShootingSolver> shooter;
     
@@ -52,13 +53,13 @@ class NewtonSolver
         real_t computeL2Norm(const vec_real& vc);
 
     public:
-        NewtonSolver(SimulationConfig configIn, std::filesystem::path dataPathIn);
+        NewtonSolver(SimulationConfig configIn, std::filesystem::path dataPathIn, bool benchmarkIn=false);
 
         #if defined(USE_MPI) || defined(USE_HYBRID)
         ~NewtonSolver();
         #endif
 
-        json run();
+        json run(json* benchmark_result=nullptr);
         void writeFinalOutput();
 
 };

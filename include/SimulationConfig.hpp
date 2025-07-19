@@ -105,17 +105,14 @@ struct SimulationConfig
 struct SimulationSuite
 {
     json multiInputDict;
-    std::string firstDim;
     std::vector<std::string> simulationDims;
 
-    SimulationSuite(const std::string& filePath, std::string firstDimIn="4.000", bool reversed=false, bool ignoreConverged=false)
+    SimulationSuite(const std::string& filePath, bool reversed=false, bool ignoreConverged=false)
     {
         if (!std::filesystem::exists(filePath))
         {
             throw std::filesystem::filesystem_error("File does not exist!", filePath, std::make_error_code(std::errc::no_such_file_or_directory));
         }
-
-        firstDim = firstDimIn;
 
         std::ifstream inputFile(filePath);
         inputFile >> multiInputDict;
@@ -131,12 +128,10 @@ struct SimulationSuite
                 }
                 else if (!reversed)
                 {
-                    firstDim = (dim.key() < firstDim) ? dim.key() : firstDim;
                     convergedDims.push_back(dim.key());
                 }
                 else
                 {
-                    firstDim = (dim.key() > firstDim) ? dim.key() : firstDim;
                     convergedDims.push_back(dim.key());
                 }
             }

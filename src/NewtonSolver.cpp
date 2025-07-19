@@ -1,11 +1,11 @@
 #include "NewtonSolver.hpp"
 
-NewtonSolver::NewtonSolver(SimulationConfig configIn, std::filesystem::path dataPathIn)
+NewtonSolver::NewtonSolver(SimulationConfig configIn, std::filesystem::path dataPathIn, bool benchmarkIn)
     : config(configIn), Ntau(configIn.Ntau), Nnewton(3*configIn.Ntau/4), maxIts(configIn.MaxIterNewton), Dim(configIn.Dim),
       Delta(configIn.Delta), slowErr(configIn.SlowError), EpsNewton(configIn.EpsNewton), TolNewton(configIn.PrecisionNewton),
       XLeft(configIn.XLeft), XMid(configIn.XMid), XRight(configIn.XRight), NLeft(configIn.NLeft), NRight(configIn.NRight),
       iL(0), iM(configIn.NLeft), iR(configIn.NLeft+configIn.NRight), Debug(configIn.Debug), Verbose(configIn.Verbose),
-      Converged(configIn.Converged), initGen(configIn.Ntau, configIn.Dim, configIn.Delta), baseFolder(dataPathIn)
+      Converged(configIn.Converged), initGen(configIn.Ntau, configIn.Dim, configIn.Delta), baseFolder(dataPathIn), benchmark(benchmarkIn)
 {
     fc = configIn.fc;
     psic = configIn.psic;
@@ -36,7 +36,7 @@ NewtonSolver::~NewtonSolver()
     MPI_Type_free(&mpi_contiguous_t);
 }
 
-json NewtonSolver::run()
+json NewtonSolver::run(json* benchmark_result)
 {
     if (!Converged)
     {
@@ -44,6 +44,13 @@ json NewtonSolver::run()
         real_t fac = 1.0;
         real_t errOld = 1.0;
         json fieldVals;
+        real_t overallTimeStart{}, overallTimeEnd{};
+        real_t newtonTimeStart{}, newtonTimeEnd{};
+        
+        if (rank==0 && benchmark)
+        {
+            overallTimeStart = MPI_Wtime();    
+        }
 
         initGen.packSpectralFields(Up, psic, fc, in0);
         in0[2*Nnewton/3+2] = Delta;
@@ -53,6 +60,11 @@ json NewtonSolver::run()
         {
             if (rank==0)
             {
+                if (benchmark)
+                {
+                    newtonTimeStart = MPI_Wtime();
+                }
+                
                 std::cout << "Newton iteration: " << its+1 << std::endl;
 
                 errOld = err;
@@ -73,7 +85,7 @@ json NewtonSolver::run()
 
                 if (err<TolNewton)
                 {
-                    std::cout << "The solution has converged!" << std::endl;
+                    std::cout << "The solution has converged!" << std::endl << std::endl;
                 }
 
             }
@@ -92,6 +104,11 @@ json NewtonSolver::run()
                 in0[2*Nnewton/3+2] = 0.0;
                 initGen.unpackSpectralFields(in0, Up, psic, fc);
                 writeFinalOutput();
+                if (rank==0 && benchmark)
+                {
+                    overallTimeEnd = MPI_Wtime();
+                    (*benchmark_result)["OverallTime"] = overallTimeEnd - overallTimeStart;   
+                }
                 break;
             }
             else
@@ -104,7 +121,7 @@ json NewtonSolver::run()
                 static_cast<int>(std::log10(err)) >
                 static_cast<int>(std::log10(errOld)))
             {
-                std::cerr << "Mismatch increased – terminating Newton.\n";
+                std::cerr << "Mismatch increased – terminating Newton iteration." << std::endl;
                 break;                    
             }
 
@@ -133,6 +150,12 @@ json NewtonSolver::run()
                 {
                     in0[i] += fac * dx[i];
                 }
+
+                if (benchmark)
+                {
+                    newtonTimeEnd = MPI_Wtime();
+                    (*benchmark_result)["NewtonStep"+std::to_string(its+1)] = newtonTimeEnd - newtonTimeStart;
+                }
             }
             
         }
@@ -150,7 +173,7 @@ json NewtonSolver::run()
     {
         if (rank==0)
         {
-            std::cout << "The solution is already marked as converged!" << std::endl;   
+            std::cout << "The solution is already marked as converged!" << std::endl << std::endl;   
         }
         writeFinalOutput();
 
@@ -161,7 +184,7 @@ json NewtonSolver::run()
 }
 
 #else
-json NewtonSolver::run()
+json NewtonSolver::run(json* benchmark_result)
 {
     if (!Converged)
     {
@@ -169,6 +192,13 @@ json NewtonSolver::run()
         real_t err = 1.0;
         real_t errOld = 1.0;
         json fieldVals;
+        std::chrono::_V2::system_clock::time_point overallTimeStart{}, overallTimeEnd{};
+        std::chrono::_V2::system_clock::time_point newtonTimeStart{}, newtonTimeEnd{};
+
+        if (benchmark)
+        {
+            overallTimeStart = std::chrono::high_resolution_clock::now();
+        }
 
         initGen.packSpectralFields(Up, psic, fc, in0);
         in0[2*Nnewton/3+2] = Delta;
@@ -176,6 +206,11 @@ json NewtonSolver::run()
 
         for (size_t its=0; its<maxIts; ++its)
         {
+            if (benchmark)
+            {
+                newtonTimeStart = std::chrono::high_resolution_clock::now();
+            }
+            
             std::cout << "Newton iteration: " << its+1 << std::endl;
 
             errOld = err;
@@ -199,8 +234,13 @@ json NewtonSolver::run()
             if (err<TolNewton)
             {
                 Converged = true;
-                std::cout << "The solution has converged!" << std::endl;
+                std::cout << "The solution has converged!" << std::endl << std::endl;
                 writeFinalOutput();
+                if (benchmark)
+                {
+                    overallTimeEnd = std::chrono::high_resolution_clock::now();
+                    (*benchmark_result)["OverallTime"] = static_cast<double>((overallTimeEnd - overallTimeStart).count()) / 1e9; 
+                }
                 break;
             }
 
@@ -234,6 +274,13 @@ json NewtonSolver::run()
             for (size_t i=0; i<Nnewton; ++i)
             {
                 in0[i] += fac * dx[i];
+            }
+
+            if (benchmark)
+            {
+                newtonTimeEnd = std::chrono::high_resolution_clock::now();
+                (*benchmark_result)["NewtonStep"+std::to_string(its+1)] = 
+                static_cast<double>((newtonTimeEnd - newtonTimeStart).count()) / 1e9;
             }
         }
 
@@ -365,8 +412,10 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
 {
     if (rank==0)
     {
-        std::cout << "Starting to assemble Jacobian: " << std::endl;
+        std::cout << "Starting to assemble Jacobian: " << std::endl << std::endl;
     }
+
+    Verbose = false;
     
     auto toc_outer = std::chrono::high_resolution_clock::now();
 
@@ -393,13 +442,15 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
         {
             jacobian[i][j] = (perturbedOutput[j] - baseOutput[j]) / EpsNewton;
         }
-       
-        auto tic = std::chrono::high_resolution_clock::now();
-
-        std::cout << "Varying parameter: " << i+1 << "/" << Nnewton;
-        std::cout << " by rank " << rank;
-        std::cout << " in " << static_cast<real_t>((tic-toc).count()) / 1e9;
-        std::cout << " s." << std::endl;
+        
+        if (config.Verbose)
+        {
+            auto tic = std::chrono::high_resolution_clock::now();
+            std::cout << "Varying parameter: " << i+1 << "/" << Nnewton;
+            std::cout << " by rank " << rank;
+            std::cout << " in " << static_cast<real_t>((tic-toc).count()) / 1e9;
+            std::cout << " s." << std::endl;
+        }
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -434,8 +485,10 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
     if (rank==0)
     {
         std::cout << "Time for Newton Iteration: " << static_cast<real_t>((tic_outer-toc_outer).count()) / 1e9;
-        std::cout << " s." << std::endl;
+        std::cout << " s." << std::endl << std::endl;
     }
+
+    Verbose = config.Verbose;
     
 }
 
@@ -443,9 +496,10 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
 
 void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& baseOutput, mat_real& jacobian)
 {
+    Verbose = false;
 
     #if defined(USE_OPENMP)
-    std::cout << "Starting to assemble Jacobian: " << std::endl;
+    std::cout << "Starting to assemble Jacobian: " << std::endl << std::endl;
 
     #pragma omp parallel
     {
@@ -453,11 +507,12 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
         InitialConditionGenerator initGen_local(Ntau, Dim, Delta);
         ShootingSolver shooter_local(Ntau, Dim, config.PrecisionIRK, initGen_local, config.MaxIterIRK);
 
-        auto toc = std::chrono::high_resolution_clock::now();
+        auto toc_outer = std::chrono::high_resolution_clock::now();
 
         #pragma omp for schedule(static)
         for (size_t i=0; i<Nnewton; ++i)
         {
+            auto toc_inner = std::chrono::high_resolution_clock::now();
             vec_real perturbedInput = baseInput;
             perturbedInput[i] += EpsNewton;
 
@@ -468,25 +523,38 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
             {
                 jacobian[j][i] = (perturbedOutput[j] - baseOutput[j]) / EpsNewton;
             }
+
+            if (config.Verbose)
+            {
+                auto tic_inner = std::chrono::high_resolution_clock::now();
+                #pragma omp critical
+                {
+                    std::cout << "Varying parameter: " << i+1 << "/" << Nnewton;
+                    std::cout << " by thread " << omp_get_thread_num();
+                    std::cout << " in " << static_cast<real_t>((tic_inner-toc_inner).count()) / 1e9;
+                    std::cout << " s." << std::endl;
+                }
+                
+            }
         }
 
-        auto tic = std::chrono::high_resolution_clock::now();
+        auto tic_outer = std::chrono::high_resolution_clock::now();
         if (omp_get_thread_num() == 0)
         {
-            std::cout << "Time for Newton Iteration: " << static_cast<real_t>((tic-toc).count()) / 1e9;
-            std::cout << " s." << std::endl; 
+            std::cout << "Time for Newton Iteration: " << static_cast<real_t>((tic_outer-toc_outer).count()) / 1e9;
+            std::cout << " s." << std::endl << std::endl; 
         }
 
     }
 
     #else
-    std::cout << "Starting to assemble Jacobian: " << std::endl;
+    std::cout << "Starting to assemble Jacobian: " << std::endl << std::endl;
 
     auto toc_outer = std::chrono::high_resolution_clock::now();
 
     for (size_t i=0; i<Nnewton; ++i)
     {
-        auto toc = std::chrono::high_resolution_clock::now();
+        auto toc_inner = std::chrono::high_resolution_clock::now();
 
         vec_real perturbedInput = baseInput;
         perturbedInput[i] += EpsNewton;
@@ -499,19 +567,23 @@ void NewtonSolver::assembleJacobian(const vec_real& baseInput, const vec_real& b
             jacobian[j][i] = (perturbedOutput[j] - baseOutput[j]) / EpsNewton;
         }
 
-        auto tic = std::chrono::high_resolution_clock::now();
-
-        std::cout << "Varying parameter: " << i+1 << "/" << Nnewton;
-        std::cout << " in " << static_cast<real_t>((tic-toc).count()) / 1e9;
-        std::cout << " s." << std::endl;
+        if (config.Verbose)
+        {
+            auto tic_inner = std::chrono::high_resolution_clock::now();
+            std::cout << "Varying parameter: " << i+1 << "/" << Nnewton;
+            std::cout << " in " << static_cast<real_t>((tic_inner-toc_inner).count()) / 1e9;
+            std::cout << " s." << std::endl;
+        }
+        
     }
 
     auto tic_outer = std::chrono::high_resolution_clock::now();
 
     std::cout << "Time for Newton Iteration: " << static_cast<real_t>((tic_outer-toc_outer).count()) / 1e9;
-    std::cout << " s." << std::endl;
+    std::cout << " s." << std::endl << std::endl;
 
     #endif
+    Verbose = config.Verbose;
 }
 #endif
 
@@ -598,9 +670,9 @@ void NewtonSolver::writeFinalOutput()
     #if defined(USE_MPI) || defined(USE_HYBRID)
     if (rank==0)
     {
-        std::cout << "Final result stored in simulation dictionary for dimension D = " << Dim << "." << std::endl;
+        std::cout << "Final result stored in simulation dictionary for dimension D = " << Dim << "." << std::endl << std::endl;
     }
     #else
-    std::cout << "Final result stored in simulation dictionary for dimension D = " << Dim << "." << std::endl;
+    std::cout << "Final result stored in simulation dictionary for dimension D = " << Dim << "." << std::endl << std::endl;
     #endif
 }
