@@ -43,7 +43,6 @@ json NewtonSolver::run(json* benchmark_result)
         real_t err = 1.0;
         real_t fac = 1.0;
         real_t errOld = 1.0;
-        json fieldVals;
         real_t overallTimeStart{}, overallTimeEnd{};
         real_t newtonTimeStart{}, newtonTimeEnd{};
         
@@ -69,11 +68,14 @@ json NewtonSolver::run(json* benchmark_result)
 
                 errOld = err;
 
-                if (Debug)
+                if (config.Debug)
                 {
+                    Debug = config.Debug;
+                    json fieldVals;
                     shoot(in0, out0, &fieldVals);
                     auto fieldPath = baseFolder / ("fields_"+std::to_string(Dim)+"_"+std::to_string(its)+".json");
                     OutputWriter::writeJsonToFile(fieldPath.c_str(), fieldVals);
+                    Debug = false;
                 }
                 else
                 {
@@ -130,7 +132,7 @@ json NewtonSolver::run(json* benchmark_result)
 
             if (rank==0)
             {
-                if (Debug)
+                if (config.Debug)
                 {
                     auto jacPath = baseFolder / ("jacobian_"+std::to_string(Dim)+"_"+std::to_string(its+1)+".csv");
                     OutputWriter::writeMatrix(jacPath.c_str(), J);
@@ -191,7 +193,7 @@ json NewtonSolver::run(json* benchmark_result)
         real_t fac = 1.0;
         real_t err = 1.0;
         real_t errOld = 1.0;
-        json fieldVals;
+        
         std::chrono::_V2::system_clock::time_point overallTimeStart{}, overallTimeEnd{};
         std::chrono::_V2::system_clock::time_point newtonTimeStart{}, newtonTimeEnd{};
 
@@ -215,11 +217,14 @@ json NewtonSolver::run(json* benchmark_result)
 
             errOld = err;
 
-            if (Debug)
+            if (config.Debug)
             {
+                Debug = config.Debug;
+                json fieldVals;
                 shoot(in0, out0, &fieldVals);
                 auto fieldPath = baseFolder / ("fields_"+std::to_string(Dim)+"_"+std::to_string(its)+".json");
                 OutputWriter::writeJsonToFile(fieldPath.c_str(), fieldVals);
+                Debug = false;
             }
             else
             {
@@ -255,7 +260,7 @@ json NewtonSolver::run(json* benchmark_result)
             mat_real J(Nnewton, vec_real(Nnewton));
             assembleJacobian(in0, out0, J);
 
-            if (Debug)
+            if (config.Debug)
             {
                 auto jacPath = baseFolder / ("jacobian_"+std::to_string(Dim)+"_"+std::to_string(its+1)+".csv");
                 OutputWriter::writeMatrix(jacPath.c_str(), J);

@@ -44,16 +44,16 @@ void ShootingSolver::integrateToMidpoint(
                 #endif
             }
 
-            if ((Debug && i%100==0) || (Debug && i==(endIdx-1)))
+            if (Debug && (i%100==0 || i==endIdx-1) && fieldVals)
             {
                 initGen.StateVectorToFields(Y1, U, V, f, A, dUdt, dVdt, dFdt, xGrid[i]); 
                 
                 std::for_each(A.begin(), A.end(), [](auto& ele){ele=std::sqrt(1/ele);});
 
-                (*fieldVals)[xGrid[i]]["A"] = A;
-                (*fieldVals)[xGrid[i]]["U"] = U;
-                (*fieldVals)[xGrid[i]]["V"] = V;
-                (*fieldVals)[xGrid[i]]["f"] = f;
+                (*fieldVals)[std::to_string(xGrid[i])]["A"] = A;
+                (*fieldVals)[std::to_string(xGrid[i])]["U"] = U;
+                (*fieldVals)[std::to_string(xGrid[i])]["V"] = V;
+                (*fieldVals)[std::to_string(xGrid[i])]["f"] = f;
             }
 
             Y1 = Y2;
@@ -82,16 +82,16 @@ void ShootingSolver::integrateToMidpoint(
                 #endif
             }
 
-            if ((Debug && i%100==0) || (Debug && i==(endIdx+1)) || (Debug && i==startIdx))
+            if (Debug && (i%100==0 || i==endIdx+1 || i==startIdx) && fieldVals)
             {
                 initGen.StateVectorToFields(Y1, U, V, f, A, dUdt, dVdt, dFdt, xGrid[i]); 
                 
                 std::for_each(A.begin(), A.end(), [](auto& ele){ele=std::sqrt(1/ele);});
 
-                (*fieldVals)[xGrid[i]]["A"] = A;
-                (*fieldVals)[xGrid[i]]["U"] = U;
-                (*fieldVals)[xGrid[i]]["V"] = V;
-                (*fieldVals)[xGrid[i]]["f"] = f;
+                (*fieldVals)[std::to_string(xGrid[i])]["A"] = A;
+                (*fieldVals)[std::to_string(xGrid[i])]["U"] = U;
+                (*fieldVals)[std::to_string(xGrid[i])]["V"] = V;
+                (*fieldVals)[std::to_string(xGrid[i])]["f"] = f;
             }
 
             Y1 = Y2;

@@ -5,7 +5,7 @@
   "XMid": 0.1,
   "XRight": 0.999,
   "EpsNewton": 1e-8,
-  "PrecisionNewton": 1e-9,
+  "PrecisionNewton": 1e-14,
   "MaxIterNewton": 100,
   "Verbose": true,
   "SlowError": 1e-3,

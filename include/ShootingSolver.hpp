@@ -27,6 +27,6 @@ class ShootingSolver
         
 
         void shoot(vec_complex& YLeft, vec_complex& YRight, const vec_real& gridX,
-                   size_t iLeft, size_t iRight, size_t iMid, vec_complex& mismatchOut, bool =false, json* fieldVals=nullptr);
+                   size_t iLeft, size_t iRight, size_t iMid, vec_complex& mismatchOut, bool Debug=false, json* fieldVals=nullptr);
 
 };
