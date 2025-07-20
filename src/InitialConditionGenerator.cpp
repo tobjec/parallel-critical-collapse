@@ -1,6 +1,6 @@
 #include "InitialConditionGenerator.hpp"
 
-InitialConditionGenerator::InitialConditionGenerator(int Ntau_, real_t Dim_, real_t Delta_)
+InitialConditionGenerator::InitialConditionGenerator(size_t Ntau_, real_t Dim_, real_t Delta_)
     : Ntau(Ntau_), Nnewton(3*Ntau_/4), Dim(Dim_), Delta(Delta_), fft(Ntau_, Delta_) {}
 
 void InitialConditionGenerator::computeLeftExpansion(
@@ -31,7 +31,10 @@ void InitialConditionGenerator::computeLeftExpansion(
 
     // Step 2: Solve inhomogeneous ODE for u1
     vec_real Coeff1(Ntau, 1.0), Coeff2(Ntau), u1;
-    for (int j = 0; j < Ntau; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau; ++j)
     {
         Coeff2[j] = -(Dim - 1.0) * psi0[j] * f0[j];
     }
@@ -63,7 +66,10 @@ void InitialConditionGenerator::computeLeftExpansion(
              v1(Ntau), v2(Ntau), v3(Ntau), v4(Ntau), v5(Ntau),
              U(Ntau), V(Ntau), F(Ntau);
 
-    for (int j = 0; j < Ntau; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau; ++j)
     {
         const real_t f = f0[j], psi = psi0[j], d = Dim;
         const real_t u1j = u1[j], du1 = du1dtau[j], d2u1 = d2u1dtau2[j], d3u1 = d3u1dtau3[j], d4u1 = d4u1dtau4[j];
@@ -156,6 +162,59 @@ void InitialConditionGenerator::computeLeftExpansion(
     if (PrintDiagnostics)
     {
         std::cout << "[INFO] Left-side 5th-order Taylor expansion at x = " << XLeft << " completed.\n";
+
+        real_t f20max = 0.0, f42max = 0.0;
+        real_t u21max = 0.0, u32max = 0.0, u43max = 0.0, u54max = 0.0;
+        real_t f0norm = 0.0, f2norm = 0.0, f4norm = 0.0;
+        real_t u1norm = 0.0, u2norm = 0.0, u3norm = 0.0, u4norm = 0.0, u5norm = 0.0;
+
+        for (size_t j = 0; j < Ntau; ++j)
+        {
+            f20max = std::max(f20max, std::abs(std::pow(XLeft, 2) * f2[j] / f0[j]));
+            f42max = std::max(f42max, std::abs(std::pow(XLeft, 2) * f4[j] / f2[j]));
+            u21max = std::max(u21max, std::abs(XLeft * u2[j] / u1[j]));
+            u32max = std::max(u32max, std::abs(XLeft * u3[j] / u2[j]));
+            u43max = std::max(u43max, std::abs(XLeft * u4[j] / u3[j]));
+            u54max = std::max(u54max, std::abs(XLeft * u5[j] / u4[j]));
+
+            f0norm += f0[j] * f0[j];
+            f2norm += f2[j] * f2[j];
+            f4norm += f4[j] * f4[j];
+
+            u1norm += u1[j] * u1[j];
+            u2norm += u2[j] * u2[j];
+            u3norm += u3[j] * u3[j];
+            u4norm += u4[j] * u4[j];
+            u5norm += u5[j] * u5[j];
+        }
+
+        f0norm = std::sqrt(f0norm);
+        f2norm = std::sqrt(f2norm);
+        f4norm = std::sqrt(f4norm);
+        u1norm = std::sqrt(u1norm);
+        u2norm = std::sqrt(u2norm);
+        u3norm = std::sqrt(u3norm);
+        u4norm = std::sqrt(u4norm);
+        u5norm = std::sqrt(u5norm);
+
+        std::cout << "***************************************\n";
+        std::cout << " INFO: Taylor expansion at xleft = " << XLeft << "\n";
+        std::cout << "***************************************\n";
+
+        std::cout << "max(x^2 f2 / f0) = " << f20max << "\n";
+        std::cout << "max(x^2 f4 / f2) = " << f42max << "\n\n";
+        std::cout << "max(x * u2 / u1) = " << u21max << "\n";
+        std::cout << "max(x * u3 / u2) = " << u32max << "\n";
+        std::cout << "max(x * u4 / u3) = " << u43max << "\n";
+        std::cout << "max(x * u5 / u4) = " << u54max << "\n\n";
+
+        std::cout << "(x^2 f2norm) / f0norm = " << (std::pow(XLeft, 2) * f2norm / f0norm) << "\n";
+        std::cout << "(x^2 f4norm) / f2norm = " << (std::pow(XLeft, 2) * f4norm / f2norm) << "\n\n";
+
+        std::cout << "(x * u2norm) / u1norm = " << (XLeft * u2norm / u1norm) << "\n";
+        std::cout << "(x * u3norm) / u2norm = " << (XLeft * u3norm / u2norm) << "\n";
+        std::cout << "(x * u4norm) / u3norm = " << (XLeft * u4norm / u3norm) << "\n";
+        std::cout << "(x * u5norm) / u4norm = " << (XLeft * u5norm / u4norm) << "\n";
     }
 
 }
@@ -182,7 +241,10 @@ void InitialConditionGenerator::computeRightExpansion(
 
     // Step 2: Solve for ia20
     vec_real coeff1(Ntau), coeff2(Ntau), ia20, f0(Ntau, 1.0);
-    for (int j = 0; j < Ntau; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau; ++j)
     {
         coeff1[j] = 3.0 - d - std::pow(d - 2.0, 3) * u0[j] * u0[j] / 4.0;
         coeff2[j] = d - 3.0;
@@ -191,7 +253,10 @@ void InitialConditionGenerator::computeRightExpansion(
 
     // Step 3: Solve for v0
     vec_real v0;
-    for (int j = 0; j < Ntau; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau; ++j)
     {
         coeff1[j] = (6.0 - 2.0 * d + (d - 2.0) * ia20[j]) / (2.0 * ia20[j]);
         coeff2[j] = (d - 2.0) * u0[j] / 2.0;
@@ -202,7 +267,10 @@ void InitialConditionGenerator::computeRightExpansion(
     vec_real f1(Ntau), u1(Ntau), ia21(Ntau), v1(Ntau);
 
     // f0 is already set to 1.0
-    for (int j = 0; j < Ntau; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau; ++j)
     {
         f1[j] = 3.0 - d + (d - 3.0) / ia20[j];
 
@@ -215,7 +283,10 @@ void InitialConditionGenerator::computeRightExpansion(
     }
 
     // Solve linear inhomogeneous ODE for v1
-    for (int j = 0; j < Ntau; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau; ++j)
     {
         coeff1[j] = (6.0 - 2.0 * d + d * ia20[j] - 2.0 * f1[j] * ia20[j])
                     / (2.0 * ia20[j]);
@@ -233,14 +304,20 @@ void InitialConditionGenerator::computeRightExpansion(
     // Order 2
     vec_real f2(Ntau), ia22(Ntau), u2(Ntau), du2(Ntau), v2(Ntau);
 
-    for (int j = 0; j < Ntau; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau; ++j)
     {
         f2[j] = (d - 3.0) * ((f1[j] - 1.0) * (1.0 - ia20[j]) * ia20[j] - ia21[j]) /
                 (2.0 * std::pow(ia20[j], 2));
     }
 
     // Step 2: Compute ia22
-    for (int j = 0; j < Ntau; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau; ++j)
     {
         ia22[j] = (3.0 - d
                 - (ia21[j] - ia20[j]) * (8.0 * (d - 3.0)
@@ -249,7 +326,10 @@ void InitialConditionGenerator::computeRightExpansion(
     }
 
     // Step 3: Compute u2
-    for (int j = 0; j < Ntau; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau; ++j)
     {
         const real_t A = 4.0 * (3.0 - d) * (d - 6.0 + f1[j]) * ia20[j];
         const real_t B = (d - 2.0) * (d - 8.0 + 2.0 * f1[j]) * std::pow(ia20[j], 2);
@@ -274,7 +354,10 @@ void InitialConditionGenerator::computeRightExpansion(
     fft.inverseFFT(dU2Hat, du2);
 
     // Step 5: Compute v2 via linear inhomogeneous solve
-    for (int j = 0; j < Ntau; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau; ++j)
     {
         coeff1[j] = 1.0 + d / 2.0 - 2.0 * f1[j] + (3.0 - d) / ia20[j];
 
@@ -300,7 +383,10 @@ void InitialConditionGenerator::computeRightExpansion(
 
     // Order 3
     vec_real f3(Ntau), ia23(Ntau), u3(Ntau), v3(Ntau);
-    for (int j = 0; j < Ntau; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau; ++j)
     {
         f3[j] = ((-3.0 + d) * ((1.0 - f1[j] + f2[j]) * std::pow(ia20[j], 2)
             + (-1.0 + f1[j] - f2[j]) * std::pow(ia20[j], 3)
@@ -350,8 +436,10 @@ void InitialConditionGenerator::computeRightExpansion(
     }
 
     // v3 via solving inhomogeneous equation
-
-    for (int j = 0; j < Ntau; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau; ++j)
     {
         coeff1[j] = 2.0 + d / 2.0 - 3.0 * f1[j] + (3.0 - d) / ia20[j];
 
@@ -389,7 +477,10 @@ void InitialConditionGenerator::computeRightExpansion(
 
     vec_real F(Ntau), U(Ntau), V(Ntau);
 
-    for (int j = 0; j < Ntau; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau; ++j)
     {
         F[j] = f0[j] + dx * f1[j] + dx * dx * f2[j] + dx * dx * dx * f3[j];
         U[j] = u0[j] + dx * u1[j] + dx * dx * u2[j] + dx * dx * dx * u3[j];
@@ -401,7 +492,65 @@ void InitialConditionGenerator::computeRightExpansion(
     Y[2] = complex_t(Delta, Y[2].imag());
 
     if (PrintDiagnostics)
+    {
         std::cout << "[INFO] Right-side 3rd-order Taylor expansion at x = " << XRight << " completed.\n";
+        real_t f10max = 0.0, f21max = 0.0;
+        real_t u10max = 0.0, u21max = 0.0;
+        real_t v10max = 0.0, v21max = 0.0;
+        real_t f0norm = 0.0, f1norm = 0.0, f2norm = 0.0;
+        real_t u0norm = 0.0, u1norm = 0.0, u2norm = 0.0;
+        real_t v0norm = 0.0, v1norm = 0.0, v2norm = 0.0;
+
+        for (size_t j = 0; j < Ntau; ++j)
+        {
+            f10max = std::max(f10max, std::abs(dx * f1[j] / f0[j]));
+            f21max = std::max(f21max, std::abs(dx * f2[j] / f1[j]));
+            u10max = std::max(u10max, std::abs(dx * u1[j] / u0[j]));
+            u21max = std::max(u21max, std::abs(dx * u2[j] / u1[j]));
+            v10max = std::max(v10max, std::abs(dx * v1[j] / v0[j]));
+            v21max = std::max(v21max, std::abs(dx * v2[j] / v1[j]));
+
+            f0norm += f0[j] * f0[j];
+            f1norm += f1[j] * f1[j];
+            f2norm += f2[j] * f2[j];
+            u0norm += u0[j] * u0[j];
+            u1norm += u1[j] * u1[j];
+            u2norm += u2[j] * u2[j];
+            v0norm += v0[j] * v0[j];
+            v1norm += v1[j] * v1[j];
+            v2norm += v2[j] * v2[j];
+        }
+
+        f0norm = std::sqrt(f0norm);
+        f1norm = std::sqrt(f1norm);
+        f2norm = std::sqrt(f2norm);
+        u0norm = std::sqrt(u0norm);
+        u1norm = std::sqrt(u1norm);
+        u2norm = std::sqrt(u2norm);
+        v0norm = std::sqrt(v0norm);
+        v1norm = std::sqrt(v1norm);
+        v2norm = std::sqrt(v2norm);
+
+        std::cout << "***************************************\n";
+        std::cout << " INFO: Taylor expansion at xright = " << XRight << "\n";
+        std::cout << "***************************************\n";
+        std::cout << "max((x-1) * f1 / f0) = " << f10max << "\n";
+        std::cout << "max((x-1) * f2 / f1) = " << f21max << "\n\n";
+        std::cout << "max((x-1) * u1 / u0) = " << u10max << "\n";
+        std::cout << "max((x-1) * u2 / u1) = " << u21max << "\n\n";
+        std::cout << "max((x-1) * v1 / v0) = " << v10max << "\n";
+        std::cout << "max((x-1) * v2 / v1) = " << v21max << "\n\n";
+
+        std::cout << "((x-1) * f1norm) / f0norm = " << dx * f1norm / f0norm << "\n";
+        std::cout << "((x-1) * f2norm) / f1norm = " << dx * f2norm / f1norm << "\n\n";
+
+        std::cout << "((x-1) * u1norm) / u0norm = " << dx * u1norm / u0norm << "\n";
+        std::cout << "((x-1) * u2norm) / u1norm = " << dx * u2norm / u1norm << "\n\n";
+
+        std::cout << "((x-1) * v1norm) / v0norm = " << dx * v1norm / v0norm << "\n";
+        std::cout << "((x-1) * v2norm) / v1norm = " << dx * v2norm / v1norm << "\n";
+        
+    }
 }
 
 void InitialConditionGenerator::packSpectralFields(
@@ -418,13 +567,16 @@ void InitialConditionGenerator::packSpectralFields(
 
     Z.resize(Nnewton);
 
-    for (int j = 0; j < Nnewton/6; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Nnewton/6; ++j)
     {
-        Z[j] = Odd1F[2*j+1].real();
+        Z[2*j] = Odd1F[2*j+1].real();
         Z[2*j+1] = Odd1F[2*j+1].imag();
-        Z[j+Nnewton/3] = Odd2F[2*j+1].real();
+        Z[2*j+Nnewton/3] = Odd2F[2*j+1].real();
         Z[2*j+1+Nnewton/3] = Odd2F[2*j+1].imag();
-        Z[j+2*Nnewton/3] = EvenF[2*j].real();
+        Z[2*j+2*Nnewton/3] = EvenF[2*j].real();
         Z[2*j+1+2*Nnewton/3] = EvenF[2*j].imag();
     }
 
@@ -436,15 +588,25 @@ void InitialConditionGenerator::unpackSpectralFields(const vec_real& Z,
     vec_real& Odd1, vec_real& Odd2, vec_real& Even)
 {
 
-    vec_complex Odd1F(Ntau/4+1, complex_t(0.0));
-    vec_complex Odd2F(Ntau/4+1, complex_t(0.0));
-    vec_complex EvenF(Ntau/4+1, complex_t(0.0));
+    vec_complex Odd1F(Ntau/2, complex_t(0.0));
+    vec_complex Odd2F(Ntau/2, complex_t(0.0));
+    vec_complex EvenF(Ntau/2, complex_t(0.0));
 
-    for (int j = 0; j < Nnewton/6; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Nnewton/6; ++j)
     {
-        Odd1F[2*j+1] = complex_t(Z[j], Z[2*j+1]);
-        Odd2F[2*j+1] = complex_t(Z[j+Nnewton/3], Z[2*j+1+Nnewton/3]);
-        EvenF[2*j] = complex_t(Z[j+2*Nnewton/3], Z[2*j+1+2*Nnewton/3]);
+        Odd1F[2*j+1] = complex_t(Z[2*j], Z[2*j+1]);
+        Odd1F[Ntau/2-2*j-1] = std::conj(Odd1F[2*j+1]);
+        Odd2F[2*j+1] = complex_t(Z[2*j+Nnewton/3], Z[2*j+1+Nnewton/3]);
+        Odd2F[Ntau/2-2*j-1] = std::conj(Odd2F[2*j+1]);
+        EvenF[2*j] = complex_t(Z[2*j+2*Nnewton/3], Z[2*j+1+2*Nnewton/3]);
+        if (j!=0)
+        {
+            EvenF[Ntau/2-2*j] = std::conj(EvenF[2*j]);
+        } 
+
     }
 
     EvenF[0] = complex_t(EvenF[0].real());
@@ -455,6 +617,7 @@ void InitialConditionGenerator::unpackSpectralFields(const vec_real& Z,
 
     // Restore high-frequency cosine
     EvenF[Nnewton/3] = complex_t(Z[2*Nnewton/3+1]) / 2.0;
+    EvenF[Nnewton] = complex_t(Z[2*Nnewton/3+1]) / 2.0;
 
     fft.inverseFFT(Odd1F, Odd1);
     fft.inverseFFT(Odd2F, Odd2);
@@ -465,13 +628,17 @@ void InitialConditionGenerator::unpackSpectralFields(const vec_real& Z,
 void InitialConditionGenerator::FieldsToStateVector(const vec_real& U, const vec_real& V,
     const vec_real& F, vec_complex& Y)
 {
+    Y.resize(Ntau);
 
-    for (int j = 0; j<Ntau; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau; ++j)
     {
         Y[j] = complex_t(U[j], V[j] + F[j]);
     }
 
-    fft.forwardFFTComplex(Y, Y);
+    fft.forwardFFT(Y, Y);
     fft.halveModes(Y, Y);
 
 }
@@ -481,15 +648,17 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
 {
     vec_complex compVec1, compVec2;
     Delta = Y[2].real();
-    Y[2] = -std::conj(Y[Y.size()-2]);
-
-    fft.doubleModes(Y, compVec1, Ntau/2);
+    fft.doubleModes(Y, compVec1);
+    compVec1[2] = complex_t(-compVec1[compVec1.size()-2].real(), compVec1[2].imag());
 
     fft.differentiate(compVec1, compVec2, Delta);
 
-    fft.inverseFFTComplex(compVec1, compVec1);    
+    fft.inverseFFT(compVec1, compVec1);    
 
-    for (int j=0; j<Ntau/2; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau/2; ++j)
     {
         U[j] = 0.5 * (compVec1[j].real() - compVec1[j+Ntau/2].real());
         V[j] = 0.5 * (compVec1[j].imag() - compVec1[j+Ntau/2].imag());
@@ -497,19 +666,23 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
     }
 
     // Shifting symmetries
-    for (int j=0; j<Ntau/2; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau/2; ++j)
     {
         U[j+Ntau/2] = - U[j];
         V[j+Ntau/2] = - V[j];
         F[j+Ntau/2] = F[j];
     }
 
-   
-
     // Derivatives
-    fft.inverseFFTComplex(compVec2, compVec2);
+    fft.inverseFFT(compVec2, compVec2);
 
-    for (int j=0; j<Ntau/2; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau/2; ++j)
     {
         dUdt[j] = 0.5 * (compVec2[j].real() - compVec2[j+Ntau/2].real());
         dVdt[j] = 0.5 * (compVec2[j].imag() - compVec2[j+Ntau/2].imag());
@@ -517,19 +690,23 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
     }
 
     // Shifting symmetries
-    for (int j=0; j<Ntau/2; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau/2; ++j)
     {
         dUdt[j+Ntau/2] = - dUdt[j];
         dVdt[j+Ntau/2] = - dVdt[j];
         dFdt[j+Ntau/2] = dFdt[j];
     }
 
-
-
     //IA2 from constraint
     vec_real Coeff1(Ntau), Coeff2(Ntau);
 
-    for (int j=0; j<Ntau; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau; ++j)
     {
         Coeff1[j] = - ((X+F[j]) * U[j]*U[j] + (X-F[j]) * V[j]*V[j])
                     * std::pow((Dim - 2.0),3) / (8.0 * X) - (Dim - 3.0);
@@ -545,13 +722,15 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
 {
     vec_complex compVec1;
     Delta = Y[2].real();
-    Y[2] = complex_t(-Y[Y.size()-2].real(), Y[2].imag());
+    fft.doubleModes(Y, compVec1);
+    compVec1[2] = complex_t(-compVec1[compVec1.size()-2].real(), compVec1[2].imag());
 
-    fft.doubleModes(Y, compVec1, Ntau/2);
+    fft.inverseFFT(compVec1, compVec1);
 
-    fft.inverseFFTComplex(compVec1, compVec1);
-
-    for (int j=0; j<Ntau/2; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau/2; ++j)
     {
         U[j] = 0.5 * (compVec1[j].real() - compVec1[j+Ntau/2].real());
         V[j] = 0.5 * (compVec1[j].imag() - compVec1[j+Ntau/2].imag());
@@ -559,7 +738,10 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
     }
 
     // Shifting symmetries
-    for (int j=0; j<Ntau/2; ++j)
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (size_t j=0; j<Ntau/2; ++j)
     {
         U[j+Ntau/2] = - U[j];
         V[j+Ntau/2] = - V[j];

@@ -7,10 +7,10 @@ ShootingSolver::ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, Initia
 }
 
 void ShootingSolver::shoot(vec_complex& YLeft, vec_complex& YRight, const vec_real& gridX,
-    size_t iLeft, size_t iRight, size_t iMid, vec_complex& mismatchOut)
+    size_t iLeft, size_t iRight, size_t iMid, vec_complex& mismatchOut, bool Debug, json* fieldVals)
 {
-    integrateToMidpoint(YLeft, gridX, iLeft, iMid, true, YLeft);
-    integrateToMidpoint(YRight, gridX, iRight, iMid, false, YRight);
+    integrateToMidpoint(YLeft, gridX, iLeft, iMid, true, YLeft, Debug, fieldVals);
+    integrateToMidpoint(YRight, gridX, iRight, iMid, false, YRight, Debug, fieldVals);
 
     computeMismatch(YLeft, YRight, mismatchOut);
 }
@@ -18,18 +18,47 @@ void ShootingSolver::shoot(vec_complex& YLeft, vec_complex& YRight, const vec_re
 void ShootingSolver::integrateToMidpoint(
     const vec_complex& Yinit, const vec_real& xGrid,
     size_t startIdx, size_t endIdx, bool forward,
-    vec_complex& Yfinal)
+    vec_complex& Yfinal, bool Debug, json* fieldVals)
 {
     vec_complex Y1=Yinit, Y2=Yinit;
-
+    vec_real A(Ntau), U(Ntau), V(Ntau), f(Ntau), dUdt(Ntau), dVdt(Ntau), dFdt(Ntau); 
+    
     if (forward)
     {
         for (size_t i=startIdx; i<endIdx; ++i)
         {
             stepper->integrate(Y1, Y2, xGrid[i], xGrid[i+1], converged, itsReached, maxIts);
+
+            if (!converged)
+            {
+                #if defined(USE_MPI) || defined(USE_HYBRID)
+                int rank;
+                MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+                std::cerr << "ERROR for rank:" << rank << ", no convergence between grid point " << xGrid[i] << " (" << i << ") ";
+                std::cerr << " and " << xGrid[i+1] << " (" << i+1 << ") " << std::endl;
+                MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+                #else
+                std::cerr << "ERROR: No convergence between grid point " << xGrid[i] << " (" << i << ") ";
+                std::cerr << " and " << xGrid[i+1] << " (" << i+1 << ") " << std::endl;
+                std::exit(EXIT_FAILURE);
+                #endif
+            }
+
+            if (Debug && (i%100==0 || i==endIdx-1) && fieldVals)
+            {
+                initGen.StateVectorToFields(Y1, U, V, f, A, dUdt, dVdt, dFdt, xGrid[i]); 
+                
+                std::for_each(A.begin(), A.end(), [](auto& ele){ele=std::sqrt(1/ele);});
+
+                (*fieldVals)[std::to_string(xGrid[i])]["A"] = A;
+                (*fieldVals)[std::to_string(xGrid[i])]["U"] = U;
+                (*fieldVals)[std::to_string(xGrid[i])]["V"] = V;
+                (*fieldVals)[std::to_string(xGrid[i])]["f"] = f;
+            }
+
             Y1 = Y2;
         }
-        Yfinal = Y2;
+        Yfinal = Y1;
         
     }
     else
@@ -37,9 +66,37 @@ void ShootingSolver::integrateToMidpoint(
         for (size_t i=startIdx; i>endIdx; --i)
         {
             stepper->integrate(Y1, Y2, xGrid[i], xGrid[i-1], converged, itsReached, maxIts);
+
+            if (!converged)
+            {
+                #if defined(USE_MPI) || defined(USE_HYBRID)
+                int rank;
+                MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+                std::cerr << "ERROR for rank:" << rank << ", no convergence between grid point " << xGrid[i] << " (" << i << ") ";
+                std::cerr << " and " << xGrid[i-1] << " (" << i-1 << ") " << std::endl;
+                MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+                #else
+                std::cerr << "ERROR: No convergence between grid point " << xGrid[i] << " (" << i << ") ";
+                std::cerr << " and " << xGrid[i-1] << " (" << i-1 << ") " << std::endl;
+                std::exit(EXIT_FAILURE);
+                #endif
+            }
+
+            if (Debug && (i%100==0 || i==endIdx+1 || i==startIdx) && fieldVals)
+            {
+                initGen.StateVectorToFields(Y1, U, V, f, A, dUdt, dVdt, dFdt, xGrid[i]); 
+                
+                std::for_each(A.begin(), A.end(), [](auto& ele){ele=std::sqrt(1/ele);});
+
+                (*fieldVals)[std::to_string(xGrid[i])]["A"] = A;
+                (*fieldVals)[std::to_string(xGrid[i])]["U"] = U;
+                (*fieldVals)[std::to_string(xGrid[i])]["V"] = V;
+                (*fieldVals)[std::to_string(xGrid[i])]["f"] = f;
+            }
+
             Y1 = Y2;
         }
-        Yfinal = Y2;
+        Yfinal = Y1;
 
     }
 }
@@ -56,7 +113,15 @@ void ShootingSolver::computeMismatch(
 
     if (mismatchOut[2].real() > Precision)
     {
-        std::cout << "Mismatch in Delta from left and right side!!!" << std::endl;
+         #if defined(USE_MPI) || defined(USE_HYBRID)
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        std::cerr << "ERROR for rank:" << rank << ", mismatch in Delta from left and right side!!!" << std::endl;
+        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+        #else
+        std::cerr << "Mismatch in Delta from left and right side!!!" << std::endl;
+        std::exit(EXIT_FAILURE);
+        #endif
     }
 
     // Enforce consistency of Delta value

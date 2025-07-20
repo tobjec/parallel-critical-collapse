@@ -7,13 +7,13 @@ class InitialConditionGenerator
 {
 
     private:
-        int Ntau, Nnewton;       // Number of grid points
+        size_t Ntau, Nnewton;       // Number of grid points
         real_t Dim;           // Physical dimension (e.g., 4.0)
         real_t Delta;         // Period (used in FFT)
         SpectralTransformer fft; // Fourier engine      
 
     public:
-        InitialConditionGenerator(int Ntau_, real_t Dim_, real_t Delta_);
+        InitialConditionGenerator(size_t Ntau_, real_t Dim_, real_t Delta_);
 
         // Compute Taylor expansion and return packed vector Y
         // isLeft = true  → x ≈ 0 expansion (order 5)

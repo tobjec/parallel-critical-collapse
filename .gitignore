@@ -1,6 +1,8 @@
 # Prerequisites
 *.d
 .vscode/
+*.csv
+mpi_error_evaluation.py
 
 # Compiled Object files
 *.slo
@@ -34,3 +36,7 @@
 
 # Build directories
 build/
+build-asan/
+.vscode/settings.json
+data/results.json
+data/xgrid.txt

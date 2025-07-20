@@ -1,93 +1,106 @@
 #include "SpectralTransformer.hpp"
 
-SpectralTransformer::SpectralTransformer(int N_, real_t period_)
-    : N(N_), N_freq(N_/2 + 1), period(period_), k0(2.0*M_PI / period_)
+SpectralTransformer::SpectralTransformer(size_t N_, real_t period_)
+    : N(N_), period(period_), k0(2.0*M_PI / period_)
 {
-    real_data = fftw_alloc_real(N_);
-    freq_data = fftw_alloc_complex(N_/2 + 1);
-    complex_data = fftw_alloc_complex(N_);
-    freq_data_complex = fftw_alloc_complex(N_);
+    forward_data = fftw_alloc_complex(N_);
+    backward_data = fftw_alloc_complex(N_);
 
-    forward_plan  = fftw_plan_dft_r2c_1d(N_, real_data, freq_data, FFTW_MEASURE);
-    backward_plan = fftw_plan_dft_c2r_1d(N_, freq_data, real_data, FFTW_MEASURE);
-    forward_plan_complex  = fftw_plan_dft_1d(N_, complex_data, freq_data_complex, FFTW_FORWARD, FFTW_MEASURE);
-    backward_plan_complex = fftw_plan_dft_1d(N_, freq_data_complex, complex_data, FFTW_BACKWARD, FFTW_MEASURE);
+    // Changing FFT forward and backward flag due to DFT definition of FFTW3 (-exp(...) vs. exp(...))
+    #ifdef USE_OPENMP
+
+    #pragma omp critical(fftw_planner)
+    {
+        forward_plan  = fftw_plan_dft_1d(static_cast<int>(N_), forward_data, backward_data, FFTW_BACKWARD, FFTW_ESTIMATE);
+        backward_plan = fftw_plan_dft_1d(static_cast<int>(N_), backward_data, forward_data, FFTW_FORWARD, FFTW_ESTIMATE);
+    }
+    
+    #else
+
+    forward_plan  = fftw_plan_dft_1d(static_cast<int>(N_), forward_data, backward_data, FFTW_BACKWARD, FFTW_ESTIMATE);
+    backward_plan = fftw_plan_dft_1d(static_cast<int>(N_), backward_data, forward_data, FFTW_FORWARD, FFTW_ESTIMATE);
+
+    #endif
+
 }
 
 SpectralTransformer::~SpectralTransformer()
 {
     fftw_destroy_plan(forward_plan);
     fftw_destroy_plan(backward_plan);
-    fftw_destroy_plan(forward_plan_complex);
-    fftw_destroy_plan(backward_plan_complex);
-    fftw_free(real_data);
-    fftw_free(freq_data);
-    fftw_free(complex_data);
-    fftw_free(freq_data_complex);
+    fftw_free(forward_data);
+    fftw_free(backward_data);
 }
 
 void SpectralTransformer::forwardFFT(const vec_real& in, vec_complex& out)
 {
-    std::copy(in.begin(), in.end(), real_data);
+
+    for (size_t i=0; i<N; ++i)
+    {
+        forward_data[i][0] = in[i];
+        forward_data[i][1] = 0.0;
+    }
 
     fftw_execute(forward_plan);
 
-    out.resize(N_freq);
-    for (int i = 0; i < N_freq; ++i)
+    out.resize(N);
+    for (size_t i=0; i<N; ++i)
     {
-        out[i] = complex_t(freq_data[i][0], freq_data[i][1]) / static_cast<real_t>(N);
+        out[i] = complex_t(backward_data[i][0], backward_data[i][1]) / static_cast<real_t>(N);
     }
 
 }
 
 void SpectralTransformer::inverseFFT(const vec_complex& in, vec_real& out)
 {
-    for (int i = 0; i < N_freq; ++i)
+    for (size_t i=0; i<N; ++i)
     {
-        freq_data[i][0] = in[i].real();
-        freq_data[i][1] = in[i].imag();
+        backward_data[i][0] = in[i].real();
+        backward_data[i][1] = in[i].imag();
     }
 
     fftw_execute(backward_plan);
+
     out.resize(N);
-    for (int i = 0; i < N; ++i)
+    for (size_t i=0; i<N; ++i)
     {
-        out[i] = real_data[i];
+        out[i] = forward_data[i][0];
     }
 
 }
 
-void SpectralTransformer::forwardFFTComplex(const vec_complex& in, vec_complex& out)
+void SpectralTransformer::forwardFFT(const vec_complex& in, vec_complex& out)
 {
-    for (int i = 0; i < N; ++i)
+    for (size_t i=0; i<N; ++i)
     {
-        complex_data[i][0] = in[i].real();
-        complex_data[i][1] = in[i].imag();
+        forward_data[i][0] = in[i].real();
+        forward_data[i][1] = in[i].imag();
     }
 
-    fftw_execute(forward_plan_complex);
+    fftw_execute(forward_plan);
 
     out.resize(N);
-    for (int i = 0; i < N; ++i)
+    for (size_t i=0; i<N; ++i)
     {
-        out[i] = complex_t(freq_data_complex[i][0], freq_data_complex[i][1]) / static_cast<real_t>(N);
+        out[i] = complex_t(backward_data[i][0], backward_data[i][1]) / static_cast<real_t>(N);
     }
 
 }
 
-void SpectralTransformer::inverseFFTComplex(const vec_complex& in, vec_complex& out)
+void SpectralTransformer::inverseFFT(const vec_complex& in, vec_complex& out)
 {
-    for (int i = 0; i < N; ++i)
+    for (size_t i=0; i<N; ++i)
     {
-        freq_data_complex[i][0] = in[i].real();
-        freq_data_complex[i][1] = in[i].imag();
+        backward_data[i][0] = in[i].real();
+        backward_data[i][1] = in[i].imag();
     }
 
-    fftw_execute(backward_plan_complex);
+    fftw_execute(backward_plan);
+
     out.resize(N);
-    for (int i = 0; i < N; ++i)
+    for (size_t i=0; i<N; ++i)
     {
-        out[i] = complex_t(complex_data[i][0], complex_data[i][1]);
+        out[i] = complex_t(forward_data[i][0], forward_data[i][1]);
     }
 
 }
@@ -95,79 +108,43 @@ void SpectralTransformer::inverseFFTComplex(const vec_complex& in, vec_complex& 
 void SpectralTransformer::differentiate(const vec_complex& in, vec_complex& out, real_t period_)
 {
     real_t k0c = (period_ == 0.0) ? k0 : 2*M_PI / period_;
-    int size = static_cast<int>(in.size());
-
-    if (size == N_freq)
-    {
+    size_t size = in.size();
         
-        out.resize(size);
-
-        for (int k = 0; k < size-1; ++k)
-        {
-            out[k] = complex_t(0.0, k*k0c) * in[k];
-        }
-
-        out[size-1] = complex_t(0.0);
-    }
-    else
+    out.resize(size);
+    for (size_t k=0; k<size; ++k)
     {
-        
-        out.resize(size);
-
-        for (int k = 0; k < size-1; ++k)
+        if (k != size/2)
         {
-            if (k != size/2)
-            {
-                int m = (k < size/2) ? k : k-size;
-                out[k] = complex_t(0.0, m*k0c) * in[k];
-            }
-            else
-            {
-                out[size/2] = complex_t(0.0);
-            }   
+            int m = (k<size/2) ? k : k-size;
+            out[k] = -complex_t(0.0, m*k0c) * in[k];
         }
+        else
+        {
+            out[size/2] = complex_t(0.0);
+        }   
     }    
 }
 
 void SpectralTransformer::lamIntegrate(const vec_complex& fk, vec_complex& out, complex_t lambda, real_t period_)
 {
 
-    real_t k0c = (period_ == 0.0) ? k0 : 2*M_PI / period_;
-    int size = static_cast<int>(fk.size());
+    real_t k0c = (period_== 0.0) ? k0 : 2*M_PI / period_;
+    size_t size = fk.size();
 
-    if (size == N_freq)
+    out.resize(size); 
+    out[0] = lambda != complex_t(0.0) ? fk[0] / lambda : complex_t(0.0);
+    for (size_t k=1; k<size; ++k)
     {
-        out.resize(size); 
-
-        out[0] = lambda != complex_t(0.0) ? fk[0] / lambda : complex_t(0.0);
-
-        for (int k = 1; k < size-1; ++k)
+        if (k != size/2)
         {
-            complex_t denom = lambda + complex_t(0.0, k * k0c);
+            int m = (k < size/2) ? k : k-size;
+            complex_t denom = lambda - complex_t(0.0, m*k0c);
             out[k] = (std::abs(denom) < 1e-14) ? complex_t(0.0) : fk[k] / denom;
         }
-
-        out[size-1] = lambda / (std::pow(lambda,2) + std::pow(k0c*(size-1),2)) * fk[size-1];
-    }
-    else
-    {
-        out.resize(size); 
-
-        out[0] = lambda != complex_t(0.0) ? fk[0] / lambda : complex_t(0.0);
-
-        for (int k = 1; k < size-1; ++k)
+        else
         {
-            if (k != size/2)
-            {
-                int m = (k < size/2) ? k : k-size;
-                complex_t denom = lambda + complex_t(0.0, m * k0c);
-                out[k] = (std::abs(denom) < 1e-14) ? complex_t(0.0) : fk[k] / denom;
-            }
-            else
-            {
-                out[size/2-1] = lambda / (std::pow(lambda,2) + std::pow(k0c*(size/2-1),2)) * fk[size/2-1];
-            }   
-        }
+            out[size/2] = lambda / (std::pow(lambda,2) + std::pow(k0c*size/2.0, 2)) * fk[size/2]; 
+        }   
     }
 }
 
@@ -175,121 +152,66 @@ real_t SpectralTransformer::interpolate(const vec_complex& fk, real_t x, real_t 
 {
     real_t result = 0.0;
     real_t k0c = (period_ == 0.0) ? k0 : 2*M_PI / period_;
-    int size = static_cast<int>(fk.size());
+    size_t size = fk.size();
 
-    if (size == N_freq)
+    result += fk[0].real();
+    for (size_t k=1; k<size/2; ++k)
     {
-        result += fk[0].real();
-        for (int k = 1; k < size-1; ++k)
-        {
-            real_t phase = k * k0c * x;
-            result += 2.0 * (fk[k] * std::polar(1.0, phase)).real();
-        }
-        real_t phase = (size-1) * k0c * x;
-        result += fk[size-1].real() * std::cos(phase);
+        real_t phase = k*k0c*x;
+        result += (fk[k]*std::polar(1.0, -phase) + fk[size-k]*std::polar(1.0, phase)).real();
     }
-    else
-    {
-        result += fk[0].real();
-        for (int k = 1; k < size/2; ++k)
-        {
-            real_t phase = k * k0c * x;
-            result += (fk[k] * std::polar(-1.0, phase) + fk[size-k] * std::polar(1.0, phase)).real();
-        }
-        real_t phase = size/2 * k0c * x;
-        result += fk[size/2].real() * std::cos(phase);
-
-    }   
+    real_t phase = size/2.0*k0c*x;
+    result += fk[size/2].real() * std::cos(phase);   
 
     return result;
 }
 
-void SpectralTransformer::halveModes(const vec_complex& in, vec_complex& out, int Nsize)
+void SpectralTransformer::halveModes(const vec_complex& in, vec_complex& out)
 {
-    int N_in = (Nsize > 0 ) ? Nsize : static_cast<int>(in.size());
+    size_t N_in = in.size();
+    size_t N_out = N_in/2;
 
-    if (N_in == N_freq)
+    vec_complex tmp(N_out);
+
+    for (size_t k=0; k<N_out/2; ++k)
     {
-        int N_out = N_in/2 + 1;
-
-        for (int k = 0; k < N_out-1; ++k)
-        {
-            out[k] = in[k];
-        }
-
-        out[N_out-1] = in[N_out-1] + std::conj(in[N_out-1]); // unsure whether this is true
-
-        out.resize(N_out);
+        tmp[k] = in[k];
     }
-    else
+
+    tmp[N_out/2] = in[N_out/2] + in[3*N_out/2];
+
+    for (size_t k=N_out/2+1; k<N_out; ++k)
     {
-        int N_out = N_in/2;
-
-        for (int k = 0; k < N_out/2; ++k)
-        {
-            out[k] = in[k];
-        }
-
-        out[N_out/2] = in[N_out/2] + in[3*N_out/2];
-
-        for (int k = N_out/2+1; k < N_out; ++k)
-        {
-            out[k] = in[N_out+k];
-        }
-
-        out.resize(N_out);
+        tmp[k] = in[N_out+k];
     }
+
+    out.swap(tmp);
     
 }
 
-void SpectralTransformer::doubleModes(const vec_complex& in, vec_complex& out, int Nsize)
+void SpectralTransformer::doubleModes(const vec_complex& in, vec_complex& out)
 {
-    int N_in = (Nsize > 0 ) ? Nsize : static_cast<int>(in.size());
+    size_t N_in = in.size();
+    size_t N_out = 2*N_in;
 
-    if (N_in == N_freq/2+1)
+    out.resize(N_out);
+    for (size_t k=0; k<N_in/2; ++k)
     {
-        int N_out = 2 * N_in - 1;
-
-        out.resize(N_out);
-
-        for (int k = 0; k < N_in-1; ++k)
-        {
-            out[k] = in[k];
-        }
-
-        out[N_in-1] = 0.5 * in[N_in-1];
-
-        for (int k = N_in; k < N_out; ++k)
-        {
-            out[k] = complex_t(0.0);
-        }
+        out[k] = in[k];
     }
-    else
+
+    out[N_in/2] = 0.5*in[N_in/2];
+    out[3*N_in/2] = 0.5*in[N_in/2];
+
+    for (size_t k=N_in/2; k<N_in; ++k)
     {
-        int N_out = 2 * N_in;
-
-        out.resize(N_out);
-
-        for (int k = 0; k < N_in/2; ++k)
-        {
-            out[k] = in[k];
-        }
-
-        for (int k = N_in/2; k < N_in; ++k)
-        {
-            out[N_in+k] = in[k];
-        }
-
-        out[N_in/2] = 0.5 * out[3*N_in/2];
-        out[3*N_in/2] *= 0.5;
-        
-        for (int k = N_in/2+1; k < 3*N_in/2; ++k)
-        {
-            out[k] = complex_t(0.0);
-        }
-
+        out[N_in+k] = in[k];
     }
-    
+
+    for (size_t k=N_in/2+1; k<3*N_in/2; ++k)
+    {
+        out[k] = complex_t(0.0);
+    }
 
 }
 
@@ -303,7 +225,7 @@ void SpectralTransformer::solveInhom(const vec_real& f, const vec_real& g, vec_r
     vec_real F_real = x;
     vec_real h(N);
 
-    for (int i = 0; i < N; ++i)
+    for (size_t i=0; i<N; ++i)
     {
         h[i] = -g[i] * std::exp(F_real[i]);
     }
@@ -313,7 +235,7 @@ void SpectralTransformer::solveInhom(const vec_real& f, const vec_real& g, vec_r
     lamIntegrate(h_hat, H_hat, f_hat[0], period_);
     inverseFFT(H_hat, x);
 
-    for (int i = 0; i < N; ++i)
+    for (size_t i=0; i<N; ++i)
     {
         x[i] *= std::exp(-F_real[i]);
     }

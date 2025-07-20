@@ -2,51 +2,63 @@
 
 ODEStepper::ODEStepper(int Ntau_, real_t Dim_, real_t precision_, Scheme method_, InitialConditionGenerator& initGen_)
     : Ntau(Ntau_), Dim(Dim_), precision(precision_), scheme(method_), initGen(initGen_)
+{
+    size_t stage {};
+
+    switch (scheme)
     {
-        size_t stage {};
+        case Scheme::IRK1:
+            stage = 1;
+            a.assign(stage, vec_real(stage));
+            b.resize(stage);
+            c.resize(stage);
 
-        switch (scheme)
-        {
-            case Scheme::IRK2:
-                stage = 2;
-                a.assign(stage, vec_real(3));
-                b.resize(stage);
-                c.resize(stage);
+            a[0][0] = 0.5;
+            b[0] = 1.0;
+            c[0] = 0.5;
+            
+            break;
 
-                a[0][0] = 0.25;
-                a[0][1] = 0.25 - 0.5 / std::sqrt(3.0);
-                a[1][0] = 0.25 + 0.5 / std::sqrt(3.0);
-                a[1][1] = 0.25;
-                b[0] = b[1] = 0.5;
-                c[0] = 0.5 - 0.5 / std::sqrt(3.0);
-                c[1] = 0.5 + 0.5 / std::sqrt(3.0);
+        case Scheme::IRK2:
+            stage = 2;
+            a.assign(stage, vec_real(stage));
+            b.resize(stage);
+            c.resize(stage);
 
-                break;
+            a[0][0] = 0.25;
+            a[0][1] = 0.25 - 0.5 / std::sqrt(3.0);
+            a[1][0] = 0.25 + 0.5 / std::sqrt(3.0);
+            a[1][1] = 0.25;
+            b[0] = b[1] = 0.5;
+            c[0] = 0.5 - 0.5 / std::sqrt(3.0);
+            c[1] = 0.5 + 0.5 / std::sqrt(3.0);
 
-            case Scheme::IRK3:
-                stage = 3;
-                a.assign(stage, vec_real(3));
-                b.resize(stage);
-                c.resize(stage);
+            break;
 
-                a[0][0] = 5.0 / 36.0;
-                a[0][1] = 2.0 / 9.0 - 1 / std::sqrt(15.0);
-                a[0][2] = 5.0 / 36.0 - 0.5 / std::sqrt(15.0);
-                a[1][0] = 5.0 / 36.0 + std::sqrt(15.0) / 24.0;
-                a[1][1] = 2.0 / 9.0; 
-                a[1][2] = 5.0 / 36.0 + std::sqrt(15.0) / 24.0;
-                a[2][0] = 5.0 / 36.0 + 0.5 / std::sqrt(15.0);
-                a[2][1] = 2.0 / 9.0 + 1.0 / std::sqrt(15.0);
-                a[2][2] = 5.0 / 36.0;
-                b[0] = b[2] = 5.0 / 18.0;
-                b[1] = 4.0 / 9.0;
-                c[0] = 0.5 - std::sqrt(15.0) / 10.0;
-                c[1] = 0.5;
-                c[2] = 0.5 + std::sqrt(15.0) / 10.0;
+        case Scheme::IRK3:
+            stage = 3;
+            a.assign(stage, vec_real(stage));
+            b.resize(stage);
+            c.resize(stage);
 
-                break;
-        }
+            a[0][0] = 5.0 / 36.0;
+            a[0][1] = 2.0 / 9.0 - 1.0 / std::sqrt(15.0);
+            a[0][2] = 5.0 / 36.0 - 0.5 / std::sqrt(15.0);
+            a[1][0] = 5.0 / 36.0 + std::sqrt(15.0) / 24.0;
+            a[1][1] = 2.0 / 9.0; 
+            a[1][2] = 5.0 / 36.0 - std::sqrt(15.0) / 24.0;
+            a[2][0] = 5.0 / 36.0 + 0.5 / std::sqrt(15.0);
+            a[2][1] = 2.0 / 9.0 + 1.0 / std::sqrt(15.0);
+            a[2][2] = 5.0 / 36.0;
+            b[0] = b[2] = 5.0 / 18.0;
+            b[1] = 4.0 / 9.0;
+            c[0] = 0.5 - std::sqrt(15.0) / 10.0;
+            c[1] = 0.5;
+            c[2] = 0.5 + std::sqrt(15.0) / 10.0;
+
+            break;
     }
+}
 
 void ODEStepper::computeDerivatives(vec_real& Yreal, vec_real& dYreal, real_t x)
 {
@@ -62,6 +74,9 @@ void ODEStepper::computeDerivatives(vec_real& Yreal, vec_real& dYreal, real_t x)
 
     initGen.StateVectorToFields(Y, U, V, F, IA2, dUdt, dVdt, dFdt, x);
 
+    #ifdef USE_HYBRID
+    #pragma omp parallel for schedule(static)
+    #endif
     for (int j=0; j<Ntau; ++j)
     {
         dUdx[j] = (F[j] * ((Dim - 2.0) * V[j]
@@ -96,6 +111,9 @@ void ODEStepper::integrate(vec_complex& Yin, vec_complex& Yout,
 {
     switch (scheme)
     {
+        case Scheme::IRK1:
+            stepIRK(Yin, Yout, Xin, Xout, itsReached, converged, maxIts);
+            break;
         case Scheme::IRK2:
             stepIRK(Yin, Yout, Xin, Xout, itsReached, converged, maxIts);
             break;
@@ -106,7 +124,7 @@ void ODEStepper::integrate(vec_complex& Yin, vec_complex& Yout,
     }
 }
 
-// === IRK
+// IRK
 void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
                          real_t Xin, real_t Xout, int& itsReached,
                          bool& converged, int maxIts)
@@ -116,8 +134,8 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
 
     vec_real x(stage);
     vec_real y(Ntau);
-    mat_real f(stage, vec_real(Ntau, 0.0)), yK1(stage, vec_real(Ntau, 0.0)),
-             yK2(stage, vec_real(Ntau, 0.0));
+    mat_real f(stage, vec_real(Ntau)), yK1(stage, vec_real(Ntau)),
+             yK2(stage, vec_real(Ntau));
     
     itsReached = 0;
     converged = false;
@@ -145,8 +163,9 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
     }
 
     // Fixed-point iteration
-    for (int its = 0; its < maxIts; ++its)
+    for (int its=0; its<maxIts; ++its)
     {
+        ++itsReached;
         yK1 = yK2;
 
         // Calculation of derivatives
@@ -156,18 +175,26 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
         }
 
         // Compute new stage
+        #ifdef USE_HYBRID
+        #pragma omp parallel for collapse(2) schedule(static)
+        #endif
         for (int i=0; i<stage; ++i)
         {
             for (int j=0; j<Ntau; ++j)
             {
+                real_t tmp = y[j];
                 for (int k=0; k<stage; ++k)
                 {
-                    yK2[i][j] += dx * a[i][k] * f[k][j];
+                    tmp += dx * a[i][k] * f[k][j];
                 }
+                yK2[i][j] = tmp;
             }
         }
 
         real_t norm2 = 0.0;
+        #ifdef USE_HYBRID
+        #pragma omp parallel for collapse(2) reduction(+:norm2)
+        #endif
         for (int i=0; i<stage; ++i)
         {
             for (int j=0; j<Ntau; ++j)
@@ -177,12 +204,39 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
         }
 
         norm2 = std::sqrt(norm2 / (Ntau*stage));
+
+        /* if (its >= maxIts/2)
+        {
+            precision *= 10.0 * (2.0*static_cast<double>(its)/static_cast<double>(maxIts) - 1.0);
+        } */
         
         if (norm2 < precision)
         {
             converged = true;
             break;
+            
+            /* // Checking inf-norm of difference
+            real_t normInf = 0.0;
+            #ifdef USE_HYBRID
+            #pragma omp parallel for collapse(2) reduction(+:norm2)
+            #endif
+            for (int i=0; i<stage; ++i)
+            {
+                for (int j=0; j<Ntau; ++j)
+                {
+                    real_t pointNorm = std::abs(yK1[i][j] - yK2[i][j]);
+                    normInf = std::max(normInf, pointNorm);
+                }
+            }
+
+            if (normInf < 10.0*precision)
+            {
+                converged = true;
+                break;
+            } */
+
         }
+        
     }
 
     for (int i=0; i<stage; ++i)

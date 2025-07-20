@@ -18,14 +18,15 @@ class ShootingSolver
         void integrateToMidpoint(
             const vec_complex& yInit, const vec_real& xGrid,
             size_t startIdx, size_t endIdx, bool forward,
-            vec_complex& yFinal);
+            vec_complex& yFinal, bool Debug=false, json* fieldVals=nullptr);
     
         void computeMismatch(const vec_complex& yLeft, const vec_complex& yRight, vec_complex& mismatchOut);
             
     public:
         ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, InitialConditionGenerator& initGen_, int maxIts_);
+        
 
         void shoot(vec_complex& YLeft, vec_complex& YRight, const vec_real& gridX,
-                   size_t iLeft, size_t iRight, size_t iMid, vec_complex& mismatchOut);
+                   size_t iLeft, size_t iRight, size_t iMid, vec_complex& mismatchOut, bool Debug=false, json* fieldVals=nullptr);
 
 };

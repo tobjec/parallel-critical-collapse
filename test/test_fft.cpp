@@ -1,16 +1,6 @@
 #include "common.hpp"
 #include "SpectralTransformer.hpp"
 
-bool almost_equal(complex_t a, complex_t b, double tol = 1e-15)
-{
-    return std::abs(a.real() - b.real()) < tol && std::abs(a.imag() - b.imag()) < tol;
-}
-
-bool almost_equal(double a, double b, double tol = 1e-15)
-{
-    return std::abs(a - b) < tol;
-}
-
 int main()
 {
 
@@ -18,9 +8,9 @@ int main()
 
     SpectralTransformer fft(N, 1.0);
 
-    vec_real in_real(N), ref_in_real(N), ref_diff_out(N), ref_diff(N), ref_int(N);
-    vec_complex in_comp(N), ref_in_comp(N), out_real(N/2+1), out_comp(N), diff_real(N/2+1), int_real(N/2+1);
-    vec_complex halve_real(N/4+1), double_real(N/2+1), halve_comp(N/2), double_comp(N);
+    vec_real in_real(N), ref_in_real(N);
+    vec_complex in_comp(N), ref_in_comp(N), out_real(N), out_comp(N);
+    vec_complex halve_real(N/2), double_real(N), halve_comp(N/2), double_comp(N);
 
     vec_complex ref_out_real = {
         {0,0},
@@ -56,18 +46,13 @@ int main()
     for (size_t i=0; i<in_real.size(); ++i)
     {
         in_real[i] = std::sin(2*M_PI/static_cast<real_t>(N)*static_cast<real_t>(i));
-        ref_diff[i] = std::cos(2*M_PI/static_cast<real_t>(N)*static_cast<real_t>(i));
         in_comp[i] = std::polar(1.0, 2*M_PI/static_cast<real_t>(N)*static_cast<real_t>(i)); 
     }
 
     fft.forwardFFT(in_real, out_real);
-    fft.differentiate(out_real, diff_real);
-    fft.lamIntegrate(diff_real, int_real, complex_t(0.0));
-    fft.forwardFFTComplex(in_comp, out_comp);
+    fft.forwardFFT(in_comp, out_comp);
     fft.inverseFFT(out_real, ref_in_real);
-    fft.inverseFFT(diff_real, ref_diff_out);
-    fft.inverseFFT(int_real, ref_int);
-    fft.inverseFFTComplex(out_comp, ref_in_comp);
+    fft.inverseFFT(out_comp, ref_in_comp);
 
     for (size_t i=0; i<out_comp.size(); ++i)
     {
@@ -99,14 +84,6 @@ int main()
 
         assert(almost_equal(halve_comp[i], double_comp[i]));
     }
-
-    /* for (size_t i=0; i<in_real.size(); ++i)
-    {
-        assert(almost_equal(in_real[i], ref_int[i]));
-        assert(almost_equal(ref_diff[i], ref_diff_out[i]));
-    } */
-
-
 
     return 0;
 }
