@@ -159,13 +159,14 @@ json NewtonSolver::run(json* benchmark_result)
 
                 // Damping factor based on mismatch reduction
                 fac = std::min(1.0, slowErr / err);
+                
+                in0old = in0;
 
                 for (size_t i=0; i<Nnewton; ++i)
                 {
                     in0[i] += fac * dx[i];
                 }
 
-                in0old = in0;
 
                 if (benchmark)
                 {
@@ -197,7 +198,6 @@ json NewtonSolver::run(json* benchmark_result)
             real_t err = computeL2Norm(out0);
             writeFinalOutput(0, err);   
         }
-        
 
     }
 
@@ -299,13 +299,14 @@ json NewtonSolver::run(json* benchmark_result)
 
             // Damping factor based on mismatch reduction
             fac = std::min(1.0, slowErr / err);
+            
+            in0old = in0;
 
             for (size_t i=0; i<Nnewton; ++i)
             {
                 in0[i] += fac * dx[i];
             }
 
-            in0old = in0;
 
             if (benchmark)
             {
