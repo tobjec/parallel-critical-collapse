@@ -6,6 +6,7 @@ import numpy as np
 import json
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import matplotlib.gridspec as gridspec
 from matplotlib.colors import LightSource
 from itertools import product
 from decimal import Decimal
@@ -33,18 +34,31 @@ plt.rc('font', family='serif')
 
 # ============================ 3. Defining Functions =============================
 
-def round_up(val, base=1.0):
+def round_up(val: float):
     """
-    Round up a float to the nearest multiple of base.
-    E.g., 1.44 → 1.5 if base=0.5
+    Round up a float to the next "nice" power-of-10-aligned multiple.
     """
-    scale = 10 ** int(np.floor(np.log10(abs(val))) if val != 0 else 0)
-    base = scale / 2
+    if val == 0:
+        return 0.0
+    exponent = int(np.floor(np.log10(abs(val))))
+    base = 10 ** exponent
     return np.ceil(val / base) * base
 
+def round_down(val: float):
+    """
+    Round down a float to the previous "nice" power-of-10-aligned multiple.
+    """
+    if val == 0:
+        return 0.0
+    exponent = int(np.floor(np.log10(abs(val))))
+    base = 10 ** exponent
+    return np.floor(val / base) * base
 
-def round_limits(zmin, zmax):
-    return np.floor(zmin), round_up(zmax)
+def round_limits(zmin: float, zmax: float):
+    """
+    Round zmin down and zmax up to nearest power-of-10-aligned "nice" bounds.
+    """
+    return round_down(zmin), round_up(zmax)
 
 # ============================ 4. Defining Classes ===============================
 
@@ -56,7 +70,7 @@ class ResultPlotter:
         for i, file in enumerate(self.input_files):
             self.input_files[i] = Path(file).absolute()
 
-    def plot(self, kind: str, save_fpath: str=None, single_plots: bool=False) -> None:
+    def plot(self, kind: str, save_fpath: str=None, single_plots: bool=False, dim: str=None) -> None:
         
         if save_fpath:
             save_fpath = Path(save_fpath).absolute()
@@ -64,13 +78,19 @@ class ResultPlotter:
 
         match kind:
             case "convergence":
-                self.plot_convergence(save_fpath)
+                self.plot_convergence(save_fpath, single_plots)
             case "fields":
-                self.plot_fields(save_fpath)
+                self.plot_fields(save_fpath, single_plots)
+            case "initial_data":
+                self.plot_initial_data(save_fpath, dim)
+            case "echoing_period":
+                pass
+            case "benchmark":
+                pass
             case _:
                 raise ValueError(f'{kind} is not a valid keyword for creating a plot.')
             
-    def plot_convergence(self, save_fpath: Path) -> None:
+    def plot_convergence(self, save_fpath: Path, single_plots: bool) -> None:
 
         assert len(self.input_files) == 5, "There should be 5 files supplied to create" \
                                          + " the convergence plot."
@@ -187,7 +207,7 @@ class ResultPlotter:
 
                 axes[1,0].semilogy(list(range(modes.size)), fc1_k, color='#006699',
                                    label=r'$|\hat{f}^k_c(2x_R) - \hat{f}^k_c(x_R)|$', marker='o', markersize=3, ls='None')
-                axes[1,0].semilogy(list(range(modes.size)), fc2_k, color='#511D66',
+                axes[1,0].semilogy(list(range(modes.size)), fc2_k, color="#242324",
                                    label=r'$2^{-3} \left|\hat{f}^k_c(4x_R) - \hat{f}^k_c(2x_R) \right|$', marker='o', markersize=3, ls='None')
                 axes[1,1].semilogy(list(range(modes.size)), psic1_k, color='#006699',
                                    label=r'$|\hat{\psi}^k_c(2x_R) - \hat{\psi}^k_c(x_R)|$', marker='o', markersize=3, ls='None')
@@ -223,7 +243,7 @@ class ResultPlotter:
             plt.tight_layout()
             plt.show()
     
-    def plot_fields(self, save_fpath: Path) -> None:
+    def plot_fields(self, save_fpath: Path, single_plots: bool) -> None:
         
         result_dict = {}
 
@@ -247,66 +267,164 @@ class ResultPlotter:
                 fs.append(result_dict[step][x_str]['f'])
                 del result_dict[step][x_str]
 
-            result_dict[step]['A'] = np.array(As)
-            result_dict[step]['U'] = np.array(Us)
-            result_dict[step]['V'] = np.array(Vs)
-            result_dict[step]['f'] = np.array(fs)
+            result_dict[step]['a'] = np.array(As).T
+            result_dict[step]['f'] = np.array(fs).T
+            result_dict[step]['U'] = np.array(Us).T
+            result_dict[step]['V'] = np.array(Vs).T
 
-            # Meshgrid: swap x and tau to make (0,0) nearest
-            result_dict[step]["tau"], result_dict[step]["x"] = np.meshgrid(
-                result_dict[step]["tau"],
-                np.array(result_dict[step]["x"], dtype=np.float64)
+            result_dict[step]["x"], result_dict[step]["tau"] = np.meshgrid(
+                np.array(result_dict[step]["x"], dtype=np.float64),
+                result_dict[step]["tau"]
             )
 
-            fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(25, 25), subplot_kw={'projection': '3d'})
+            fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(30, 25), subplot_kw={'projection': '3d'})
 
-            fields = ['A', 'U', 'V', 'f']
+            # fig = plt.figure(figsize=(25, 35))
+            # gs = gridspec.GridSpec(2, 2, wspace=0.3, hspace=0.4)
+
+            # ax1 = fig.add_subplot(gs[0, 0], projection='3d')
+            # ax2 = fig.add_subplot(gs[0, 1], projection='3d')
+            # ax3 = fig.add_subplot(gs[1, 0], projection='3d')
+            # ax4 = fig.add_subplot(gs[1, 1], projection='3d')
+
+            # axes = [ax1, ax2, ax3, ax4]
+
+            fields = ['a', 'f', 'U', 'V']
             cmaps = [mpl.cm.Blues, mpl.cm.Greens, mpl.cm.Reds, mpl.cm.Purples]
-            titles = [r'$A(x,\tau)$', r'$U(x,\tau)$', r'$V(x,\tau)$', r'$f(x,\tau)$']
+            axtitles = [r'$a(r,\tau)$', r'$f(r,\tau)$',r'$U(r,\tau)$', r'$V(r,\tau)$']
 
-            for ax, field, cmap, title in zip(axes.flatten(), fields, cmaps, titles):
+            for ax, field, cmap, axtitle in zip(axes.flatten(), fields, cmaps, axtitles):
+                
+                x = result_dict[step]["x"]
+                t = result_dict[step]["tau"]
                 data = result_dict[step][field]
-
+                
+                xmin, xmax = round_limits(x.min(), x.max())
+                ymin, ymax = round_limits(t.min(), t.max())
                 zmin, zmax = round_limits(data.min(), data.max())
-                ax.set_zlim(zmin, zmax)
-
-                # Apply light shading
+                
                 ls = LightSource(azdeg=315, altdeg=45)
                 rgb = ls.shade(data, cmap=cmap, vert_exag=0.1, blend_mode='soft')
 
                 ax.plot_surface(
-                    result_dict[step]["tau"],  # now X-axis
-                    result_dict[step]["x"],    # now Y-axis
+                    x,
+                    t,
                     data,
                     facecolors=rgb,
                     rstride=1, cstride=1,
                     linewidth=0, antialiased=True
                 )
 
-                ax.set_xlabel(r'$\tau$', fontsize=25, labelpad=18)
-                ax.set_ylabel(r'$x$', fontsize=25, labelpad=18)
-                ax.set_zlabel(f'${title}$', fontsize=22, labelpad=18)
+                ax.zaxis.set_rotate_label(False)
+                ax.set_xlabel(r'$r$', fontsize=28, labelpad=20)
+                ax.set_ylabel(r'$\tau$', fontsize=28, labelpad=20)
+                ax.set_zlabel(f'${axtitle}$', fontsize=28, labelpad=20, rotation=90)
 
-                ax.tick_params(axis='x', pad=10, labelsize=20)
-                ax.tick_params(axis='y', pad=10, labelsize=20)
-                ax.tick_params(axis='z', pad=10, labelsize=20, width=1.5, length=6)
+                ax.tick_params(axis='x', pad=10, labelsize=22)
+                ax.tick_params(axis='y', pad=10, labelsize=22)
+                ax.tick_params(axis='z', pad=10, labelsize=22, width=1.5, length=6)
 
-                ax.view_init(elev=25, azim=45)
+                ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.25))  
+                ax.yaxis.set_major_locator(mpl.ticker.MultipleLocator(0.5))  
+                ax.zaxis.set_major_locator(mpl.ticker.MaxNLocator(5))
+
+                xticks = ax.get_xticks()
+                xtick_labels = [f"{tick:.1f}" if tick == 0 else str(tick) for tick in xticks]
+                ax.set_xticks(xticks)
+                ax.set_xticklabels(xtick_labels)
+
+                ax.set_xlim(xmin, xmax)
+                ax.set_ylim(ymin, ymax)
+                ax.set_zlim(zmin, zmax)
+
+                ax.view_init(elev=25, azim=-140)
                 ax.xaxis.pane.fill = False
                 ax.yaxis.pane.fill = False
                 ax.zaxis.pane.fill = False
 
-            plt.tight_layout()
+            plt.subplots_adjust(left=0.1, right=0.90, top=0.9, bottom=0.1, wspace=0.2, hspace=0.3)
+            #plt.tight_layout()
 
             if save_fpath:
                 save_name = Path(save_fpath.name.split('.')[0] + f'_fields_{dim}_{step}' + '.' + save_fpath.name.split('.')[-1])
-                plt.savefig((save_fpath.parent / save_name).as_posix(), dpi=300, bbox_inches='tight')
+                plt.savefig((save_fpath.parent / save_name).as_posix())
 
             plt.show()
 
 
-    def plot_initial_data(self, save_fpath: Path) -> None:
-        pass
+    def plot_initial_data(self, save_fpath: Path, dim: str) -> None:
+
+        fpath = Path(self.input_files[0])
+        result_dict = {}
+        with open(fpath.as_posix(), 'r') as f:
+            result_dict = json.load(f)
+        
+        if dim: 
+            result_dict = result_dict[dim]
+
+        assert result_dict['Converged'], "Data has to be converged to be displayed!"
+
+        t = np.linspace(0, result_dict['Initial_Conditions']['Delta'], num=result_dict['Ntau'])
+        fc = np.array(result_dict['Initial_Conditions']['fc'], dtype=np.float64)
+        psic = np.array(result_dict['Initial_Conditions']['psic'], dtype=np.float64)
+        Up = np.array(result_dict['Initial_Conditions']['Up'], dtype=np.float64)
+
+        fig, ax = plt.subplots(figsize=(10,8))
+
+        ax.plot(t, fc, label=r'$f_c$', ls='-', color='#006699')
+        ax.plot(t, Up, label=r'$U_p$', ls='-.', color='#006699')
+
+        ax2 = ax.twinx()
+        ax2.plot(t, psic, label=r'$\psi_c$', ls='--', color='#511D66')
+
+        for label in ax.get_yticklabels():
+            label.set_color('#006699')
+        
+        for label in ax2.get_yticklabels():
+            label.set_color('#511D66')
+        
+        fcmin, fcmax = round_limits(fc.min(), fc.max())
+        Upmin, Upmax = round_limits(Up.min(), Up.max())
+        fcmin = fcmin if fcmin < Upmin else Upmin
+        fcmax = fcmax if fcmax > Upmax else Upmax
+        psicmin, psicmax = round_limits(psic.min(), psic.max())
+
+        ax.set_xlim(0, np.ceil(t.max()*10)/10)
+        ax.set_ylim(fcmin, fcmax)
+        ax2.set_ylim(psicmin, psicmax)
+
+        ax.set_xlabel(r'$\tau$', fontsize=28)
+        
+        ax.xaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(2))  
+        ax.yaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(2))
+        ax2.yaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(2))
+
+        ax.grid(color='grey', which='major', linestyle='-', linewidth=0.5, alpha=0.4)
+        #ax.grid(color='grey', which='minor', linestyle=':', linewidth=0.25)
+
+        lines, labels = ax.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+
+        ax.legend(
+            lines + lines2,
+            labels + labels2,
+            loc='upper center',
+            fontsize=20,
+            ncol=3,
+            bbox_to_anchor=(0.5, 1.10),
+            frameon=False
+        )
+
+        plt.tight_layout()
+
+        if save_fpath:
+            save_name = Path(save_fpath.name.split('.')[0] 
+                             + f'_initial-data_{dim}' + '.' 
+                             + save_fpath.name.split('.')[-1])
+            plt.savefig((save_fpath.parent / save_name).as_posix())
+
+        plt.show()
+
 
     def plot_echoing_period(self, save_fpath: Path) -> None:
         pass
@@ -344,12 +462,18 @@ if __name__ == '__main__':
         '-k', '--kind',
         type=str,
         default='convergence',
-        choices=['convergence', 'fields'],
+        choices=['convergence', 'fields', 'initial_data'],
         help='Type of plot which should be produced.'
         )
+    parser.add_argument(
+        '-d', '--dim',
+        type=float,
+        default='',
+        help='Dimension which should be postprocessed'
+    )
     
     args = parser.parse_args()
 
     plotter = ResultPlotter(args.input_files)
 
-    plotter.plot(args.kind, args.output_name)
+    plotter.plot(args.kind, args.output_name, dim=f'{args.dim:.3f}')
