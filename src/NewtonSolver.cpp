@@ -55,6 +55,8 @@ json NewtonSolver::run(json* benchmark_result)
         in0[2*Nnewton/3+2] = Delta;
         generateGrid();
 
+        vec_real in0old = in0;
+
         for (size_t its=0; its<maxIts; ++its)
         {
             if (rank==0)
@@ -72,6 +74,7 @@ json NewtonSolver::run(json* benchmark_result)
                 {
                     Debug = config.Debug;
                     json fieldVals;
+                    fieldVals["Delta"] = Delta;
                     shoot(in0, out0, &fieldVals);
                     auto fieldPath = baseFolder / ("fields_"+std::to_string(Dim)+"_"+std::to_string(its)+".json");
                     OutputWriter::writeJsonToFile(fieldPath.c_str(), fieldVals);
@@ -105,7 +108,7 @@ json NewtonSolver::run(json* benchmark_result)
                 Delta = in0[2*Nnewton/3+2];
                 in0[2*Nnewton/3+2] = 0.0;
                 initGen.unpackSpectralFields(in0, Up, psic, fc);
-                writeFinalOutput();
+                writeFinalOutput(its, err);
                 if (rank==0 && benchmark)
                 {
                     overallTimeEnd = MPI_Wtime();
@@ -120,10 +123,19 @@ json NewtonSolver::run(json* benchmark_result)
             }
 
             if (its >= 2 &&
-                static_cast<int>(std::log10(err)) >
-                static_cast<int>(std::log10(errOld)))
+                std::log10(err) >
+                std::log10(errOld))
             {
-                std::cerr << "Mismatch increased – terminating Newton iteration." << std::endl;
+                Converged = true;
+                MPI_Bcast(in0old.data(), 1, mpi_contiguous_t, 0, MPI_COMM_WORLD);
+                Delta = in0old[2*Nnewton/3+2];
+                in0old[2*Nnewton/3+2] = 0.0;
+                initGen.unpackSpectralFields(in0old, Up, psic, fc);
+                writeFinalOutput(its, errOld);
+                if (rank==0)
+                {
+                    std::cerr << "Mismatch increased – terminating Newton iteration." << std::endl;
+                }
                 break;                    
             }
 
@@ -153,6 +165,8 @@ json NewtonSolver::run(json* benchmark_result)
                     in0[i] += fac * dx[i];
                 }
 
+                in0old = in0;
+
                 if (benchmark)
                 {
                     newtonTimeEnd = MPI_Wtime();
@@ -175,9 +189,15 @@ json NewtonSolver::run(json* benchmark_result)
     {
         if (rank==0)
         {
-            std::cout << "The solution is already marked as converged!" << std::endl << std::endl;   
+            std::cout << "The solution is already marked as converged!" << std::endl << std::endl;
+            initGen.packSpectralFields(Up, psic, fc, in0);
+            in0[2*Nnewton/3+2] = Delta;
+            generateGrid();
+            shoot(in0, out0);
+            real_t err = computeL2Norm(out0);
+            writeFinalOutput(0, err);   
         }
-        writeFinalOutput();
+        
 
     }
 
@@ -193,7 +213,6 @@ json NewtonSolver::run(json* benchmark_result)
         real_t fac = 1.0;
         real_t err = 1.0;
         real_t errOld = 1.0;
-        
         std::chrono::_V2::system_clock::time_point overallTimeStart{}, overallTimeEnd{};
         std::chrono::_V2::system_clock::time_point newtonTimeStart{}, newtonTimeEnd{};
 
@@ -205,6 +224,8 @@ json NewtonSolver::run(json* benchmark_result)
         initGen.packSpectralFields(Up, psic, fc, in0);
         in0[2*Nnewton/3+2] = Delta;
         generateGrid();
+
+        vec_real in0old = in0;
 
         for (size_t its=0; its<maxIts; ++its)
         {
@@ -231,8 +252,6 @@ json NewtonSolver::run(json* benchmark_result)
                 shoot(in0, out0);
             }
 
-            shoot(in0, out0);
-
             err = computeL2Norm(out0);
             std::cout << "Mismatch norm: " << err << std::endl;
 
@@ -240,7 +259,7 @@ json NewtonSolver::run(json* benchmark_result)
             {
                 Converged = true;
                 std::cout << "The solution has converged!" << std::endl << std::endl;
-                writeFinalOutput();
+                writeFinalOutput(its, err);
                 if (benchmark)
                 {
                     overallTimeEnd = std::chrono::high_resolution_clock::now();
@@ -250,9 +269,14 @@ json NewtonSolver::run(json* benchmark_result)
             }
 
             if (its >= 2 &&
-                static_cast<int>(std::log10(err)) >
-                static_cast<int>(std::log10(errOld)))
+                std::log10(err) >
+                std::log10(errOld))
             {
+                Converged = true;
+                Delta = in0old[2*Nnewton/3+2];
+                in0old[2*Nnewton/3+2] = 0.0;
+                initGen.unpackSpectralFields(in0old, Up, psic, fc);
+                writeFinalOutput(its, errOld);
                 std::cerr << "Mismatch increased – terminating Newton.\n";
                 break;                    
             }
@@ -281,6 +305,8 @@ json NewtonSolver::run(json* benchmark_result)
                 in0[i] += fac * dx[i];
             }
 
+            in0old = in0;
+
             if (benchmark)
             {
                 newtonTimeEnd = std::chrono::high_resolution_clock::now();
@@ -298,8 +324,13 @@ json NewtonSolver::run(json* benchmark_result)
     }
     else
     {
+        initGen.packSpectralFields(Up, psic, fc, in0);
+        in0[2*Nnewton/3+2] = Delta;
+        generateGrid();
+        shoot(in0, out0);
+        real_t err = computeL2Norm(out0);
         std::cout << "The solution is already marked as converged!" << std::endl;
-        writeFinalOutput();
+        writeFinalOutput(0, err);
     }
 
     return resultDict;
@@ -649,7 +680,7 @@ real_t NewtonSolver::computeL2Norm(const vec_real& vc)
     return std::sqrt(sum / static_cast<real_t>(vc.size()));
 }
 
-void NewtonSolver::writeFinalOutput()
+void NewtonSolver::writeFinalOutput(size_t newtonIts, real_t mismatchNorm)
 {
     resultDict["Ntau"] = Ntau;
     resultDict["Dim"] = Dim;
@@ -667,6 +698,8 @@ void NewtonSolver::writeFinalOutput()
     resultDict["NRight"] = NRight;
     resultDict["PrecisionIRK"] = config.PrecisionIRK;
     resultDict["MaxIterIRK"] = config.MaxIterIRK;
+    resultDict["IterNewton"] = newtonIts;
+    resultDict["mismatchNorm"] = mismatchNorm;
     resultDict["Initial_Conditions"]["Delta"] = Delta;
     resultDict["Initial_Conditions"]["fc"] = fc;
     resultDict["Initial_Conditions"]["psic"] = psic;

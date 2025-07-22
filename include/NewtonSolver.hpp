@@ -60,6 +60,6 @@ class NewtonSolver
         #endif
 
         json run(json* benchmark_result=nullptr);
-        void writeFinalOutput();
+        void writeFinalOutput(size_t newtonIts, real_t mismatchNorm);
 
 };

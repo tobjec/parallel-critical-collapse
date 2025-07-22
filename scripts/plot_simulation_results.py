@@ -6,6 +6,7 @@ import numpy as np
 import json
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+from matplotlib.colors import LightSource
 from itertools import product
 from decimal import Decimal
 from collections import OrderedDict
@@ -30,7 +31,22 @@ plt.rcParams['ytick.minor.size'] = 3
 plt.rc('text', usetex=True)
 plt.rc('font', family='serif')
 
-# ============================ 3. Defining Classes ===============================
+# ============================ 3. Defining Functions =============================
+
+def round_up(val, base=1.0):
+    """
+    Round up a float to the nearest multiple of base.
+    E.g., 1.44 → 1.5 if base=0.5
+    """
+    scale = 10 ** int(np.floor(np.log10(abs(val))) if val != 0 else 0)
+    base = scale / 2
+    return np.ceil(val / base) * base
+
+
+def round_limits(zmin, zmax):
+    return np.floor(zmin), round_up(zmax)
+
+# ============================ 4. Defining Classes ===============================
 
 class ResultPlotter:
 
@@ -40,7 +56,7 @@ class ResultPlotter:
         for i, file in enumerate(self.input_files):
             self.input_files[i] = Path(file).absolute()
 
-    def plot(self, kind: str, save_fpath: str=None) -> None:
+    def plot(self, kind: str, save_fpath: str=None, single_plots: bool=False) -> None:
         
         if save_fpath:
             save_fpath = Path(save_fpath).absolute()
@@ -49,6 +65,8 @@ class ResultPlotter:
         match kind:
             case "convergence":
                 self.plot_convergence(save_fpath)
+            case "fields":
+                self.plot_fields(save_fpath)
             case _:
                 raise ValueError(f'{kind} is not a valid keyword for creating a plot.')
             
@@ -204,10 +222,98 @@ class ResultPlotter:
             
             plt.tight_layout()
             plt.show()
+    
+    def plot_fields(self, save_fpath: Path) -> None:
+        
+        result_dict = {}
+
+        for file in self.input_files:
+            _, dim, step = file.name.rsplit('.', maxsplit=1)[0].split('_')
+            with open(file.as_posix(), 'r') as f:
+                result_dict[step] = json.load(f)
+
+            result_dict[step]["x"] = np.array(sorted(list(result_dict[step].keys()))[:-1])
+            result_dict[step]["tau"] = np.linspace(
+                0, result_dict[step]['Delta'],
+                num=len(result_dict[step][str(result_dict[step]["x"][0])]['A'])
+            )
+
+            As, Us, Vs, fs = [], [], [], []
+            for x in result_dict[step]["x"]:
+                x_str = str(x)
+                As.append(result_dict[step][x_str]['A'])
+                Us.append(result_dict[step][x_str]['U'])
+                Vs.append(result_dict[step][x_str]['V'])
+                fs.append(result_dict[step][x_str]['f'])
+                del result_dict[step][x_str]
+
+            result_dict[step]['A'] = np.array(As)
+            result_dict[step]['U'] = np.array(Us)
+            result_dict[step]['V'] = np.array(Vs)
+            result_dict[step]['f'] = np.array(fs)
+
+            # Meshgrid: swap x and tau to make (0,0) nearest
+            result_dict[step]["tau"], result_dict[step]["x"] = np.meshgrid(
+                result_dict[step]["tau"],
+                np.array(result_dict[step]["x"], dtype=np.float64)
+            )
+
+            fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(25, 25), subplot_kw={'projection': '3d'})
+
+            fields = ['A', 'U', 'V', 'f']
+            cmaps = [mpl.cm.Blues, mpl.cm.Greens, mpl.cm.Reds, mpl.cm.Purples]
+            titles = [r'$A(x,\tau)$', r'$U(x,\tau)$', r'$V(x,\tau)$', r'$f(x,\tau)$']
+
+            for ax, field, cmap, title in zip(axes.flatten(), fields, cmaps, titles):
+                data = result_dict[step][field]
+
+                zmin, zmax = round_limits(data.min(), data.max())
+                ax.set_zlim(zmin, zmax)
+
+                # Apply light shading
+                ls = LightSource(azdeg=315, altdeg=45)
+                rgb = ls.shade(data, cmap=cmap, vert_exag=0.1, blend_mode='soft')
+
+                ax.plot_surface(
+                    result_dict[step]["tau"],  # now X-axis
+                    result_dict[step]["x"],    # now Y-axis
+                    data,
+                    facecolors=rgb,
+                    rstride=1, cstride=1,
+                    linewidth=0, antialiased=True
+                )
+
+                ax.set_xlabel(r'$\tau$', fontsize=25, labelpad=18)
+                ax.set_ylabel(r'$x$', fontsize=25, labelpad=18)
+                ax.set_zlabel(f'${title}$', fontsize=22, labelpad=18)
+
+                ax.tick_params(axis='x', pad=10, labelsize=20)
+                ax.tick_params(axis='y', pad=10, labelsize=20)
+                ax.tick_params(axis='z', pad=10, labelsize=20, width=1.5, length=6)
+
+                ax.view_init(elev=25, azim=45)
+                ax.xaxis.pane.fill = False
+                ax.yaxis.pane.fill = False
+                ax.zaxis.pane.fill = False
+
+            plt.tight_layout()
+
+            if save_fpath:
+                save_name = Path(save_fpath.name.split('.')[0] + f'_fields_{dim}_{step}' + '.' + save_fpath.name.split('.')[-1])
+                plt.savefig((save_fpath.parent / save_name).as_posix(), dpi=300, bbox_inches='tight')
+
+            plt.show()
 
 
+    def plot_initial_data(self, save_fpath: Path) -> None:
+        pass
 
-# ============================ 4. Defining Functions =============================
+    def plot_echoing_period(self, save_fpath: Path) -> None:
+        pass
+
+    def plot_benchmark(self, save_fpath: Path) -> None:
+        pass
+
 
 # ============================ 5. Main Calculations ==============================
 
@@ -238,13 +344,11 @@ if __name__ == '__main__':
         '-k', '--kind',
         type=str,
         default='convergence',
-        choices=['convergence'],
+        choices=['convergence', 'fields'],
         help='Type of plot which should be produced.'
         )
     
     args = parser.parse_args()
-
-    print(args.input_files)
 
     plotter = ResultPlotter(args.input_files)
 
