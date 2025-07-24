@@ -30,6 +30,26 @@ void print_vec(const vec_real& vec)
     }
 }
 
+void print_vec(const std::vector<std::string>& vec)
+{
+    std::cout << std::setprecision(5);
+    for (size_t i=0; i<vec.size(); ++i)
+    {
+        if ((i+1)%10 == 0)
+        {
+            std::cout << vec[i] << "," << std::endl;
+        }
+        else if (i == vec.size()-1)
+        {
+            std::cout << vec[i] << std::endl;
+        }
+        else
+        {
+            std::cout << vec[i] << ", ";
+        }
+    }
+}
+
 void print_vec(const vec_complex& vec)
 {
     std::cout << std::setprecision(16);

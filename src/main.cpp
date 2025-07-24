@@ -257,10 +257,11 @@ int main(int argc, char* argv[])
                     std::string prevDim1 = configSuite.simulationDims[i-1];
                     std::string prevDim2 = configSuite.simulationDims[i-2];
                     std::string prevDim3 = configSuite.simulationDims[i-3];
-
+                    
                     SimulationConfig config_prev1 = configSuite.generateSimulation(prevDim1);
                     SimulationConfig config_prev2 = configSuite.generateSimulation(prevDim2);
                     SimulationConfig config_prev3 = configSuite.generateSimulation(prevDim3);
+
 
                     if (!config_prev1.Converged || !config_prev2.Converged || !config_prev3.Converged)
                     {
@@ -289,7 +290,7 @@ int main(int argc, char* argv[])
                     real_t Delta{};
                     vec_real dims = {std::stod(prevDim1), std::stod(prevDim2), std::stod(prevDim3)};
                     real_t curr_dim = std::stod(simDim);
-                    
+
                     for (size_t j=0; j<fc1.size(); ++j)
                     {
                         vec_real y_fc = {fc1[j], fc2[j], fc3[j]};

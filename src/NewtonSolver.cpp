@@ -188,6 +188,8 @@ json NewtonSolver::run(json* benchmark_result)
     }
     else
     {
+        real_t err{};
+
         if (rank==0)
         {
             std::cout << "The solution is already marked as converged!" << std::endl << std::endl;
@@ -195,9 +197,12 @@ json NewtonSolver::run(json* benchmark_result)
             in0[2*Nnewton/3+2] = Delta;
             generateGrid();
             shoot(in0, out0);
-            real_t err = computeL2Norm(out0);
-            writeFinalOutput(0, err);   
+            err = computeL2Norm(out0);
+               
         }
+
+        MPI_Bcast(&err, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        writeFinalOutput(0, err);
 
     }
 

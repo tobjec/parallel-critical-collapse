@@ -126,10 +126,6 @@ struct SimulationSuite
                 {
                     simulationDims.push_back(dim.key());
                 }
-                else if (!reversed)
-                {
-                    convergedDims.push_back(dim.key());
-                }
                 else
                 {
                     convergedDims.push_back(dim.key());
@@ -194,7 +190,7 @@ struct SimulationSuite
         if (multiInputDict.contains(simDimIn))
         {
             json simConfig = multiInputDict[simDimIn];
-        
+                   
             return SimulationConfig(simConfig);
         }
         else
