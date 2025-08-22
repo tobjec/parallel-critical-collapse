@@ -9,6 +9,8 @@ import matplotlib as mpl
 import matplotlib.gridspec as gridspec
 from matplotlib.colors import LightSource
 from itertools import product
+from glob import glob
+import itertools as it
 from decimal import Decimal
 from collections import OrderedDict
 from pathlib import Path
@@ -34,7 +36,7 @@ plt.rc('font', family='serif')
 
 # ============================ 3. Defining Functions =============================
 
-def round_up(val: float):
+def round_up(val: float) -> float:
     """
     Round up a float to the next "nice" power-of-10-aligned multiple.
     """
@@ -44,7 +46,7 @@ def round_up(val: float):
     base = 10 ** exponent
     return np.ceil(val / base) * base
 
-def round_down(val: float):
+def round_down(val: float) -> float:
     """
     Round down a float to the previous "nice" power-of-10-aligned multiple.
     """
@@ -54,7 +56,7 @@ def round_down(val: float):
     base = 10 ** exponent
     return np.floor(val / base) * base
 
-def round_limits(zmin: float, zmax: float):
+def round_limits(zmin: float, zmax: float) -> tuple:
     """
     Round zmin down and zmax up to nearest power-of-10-aligned "nice" bounds.
     """
@@ -70,7 +72,7 @@ class ResultPlotter:
         for i, file in enumerate(self.input_files):
             self.input_files[i] = Path(file).absolute()
 
-    def plot(self, kind: str, save_fpath: str=None, single_plots: bool=False, dim: str=None) -> None:
+    def plot(self, kind: str, save_fpath: str=None, single_plots: bool=False, dim: str | float=None) -> None:
         
         if save_fpath:
             save_fpath = Path(save_fpath).absolute()
@@ -81,12 +83,14 @@ class ResultPlotter:
                 self.plot_convergence(save_fpath, single_plots)
             case "fields":
                 self.plot_fields(save_fpath, single_plots)
+            case "mismatch_layer_finder":
+                self.plot_mismatch_pos_finder(save_fpath)
             case "initial_data":
                 self.plot_initial_data(save_fpath, dim)
             case "echoing_period":
-                pass
+                self.plot_echoing_period(save_fpath)
             case "benchmark":
-                pass
+                self.plot_benchmark(save_fpath, dim)
             case _:
                 raise ValueError(f'{kind} is not a valid keyword for creating a plot.')
             
@@ -350,7 +354,80 @@ class ResultPlotter:
                 plt.savefig((save_fpath.parent / save_name).as_posix())
 
             plt.show()
+    
+    def plot_mismatch_pos_finder(self, save_fpath: Path) -> None:
+        
+        result_dict = {}
 
+        for file in self.input_files:
+            _, dim, step = file.name.rsplit('.', maxsplit=1)[0].split('_')
+            with open(file.as_posix(), 'r') as f:
+                result_dict[step] = json.load(f)
+
+            result_dict[step]["x"] = np.array(sorted(list(result_dict[step].keys()))[:-1])
+            result_dict[step]["tau"] = np.linspace(
+                0, result_dict[step]['Delta'],
+                num=len(result_dict[step][str(result_dict[step]["x"][0])]['A'])
+            )
+
+            As, Us, Vs, fs = [], [], [], []
+            for x in result_dict[step]["x"]:
+                x_str = str(x)
+                As.append(result_dict[step][x_str]['A'])
+                Us.append(result_dict[step][x_str]['U'])
+                Vs.append(result_dict[step][x_str]['V'])
+                fs.append(result_dict[step][x_str]['f'])
+                del result_dict[step][x_str]
+
+            result_dict[step]['a'] = np.array(As).T
+            result_dict[step]['f'] = np.array(fs).T
+            result_dict[step]['U'] = np.array(Us).T
+            result_dict[step]['V'] = np.array(Vs).T
+
+            result_dict[step]["x"] = np.array(result_dict[step]["x"], dtype=np.float64)
+            result_dict[step]['psi'] = (result_dict[step]['V'] - result_dict[step]['U'])
+                                       #/ (2*result_dict[step]['x']**2)
+            
+            result_dict[step]['psi'] = np.max(result_dict[step]['psi'], axis=0)
+
+            arg_max_psi = np.argmax(result_dict[step]['psi'])
+            x_max_psi = result_dict[step]['x'][arg_max_psi]
+            
+            for field in ['a', 'f', 'U', 'V']:
+                del result_dict[step][field]
+
+            fig, ax = plt.subplots(figsize=(10,8))
+
+            ax.plot(result_dict[step]['x'], result_dict[step]['psi'], label=r'$2x^2 \Psi=V-U$',
+                    ls='-', color='#006699')
+            
+            ax.axvline(x_max_psi, label=r'$\max \limits_{x} \Psi=$'+f'{x_max_psi}', color="#8C1B3D", ls='--')
+            
+            ymin, ymax = round_limits(result_dict[step]['psi'].min(), result_dict[step]['psi'].max())
+
+            ax.set_xlim(0, 1)
+            ax.set_ylim(ymin, ymax)
+            ax.set_xlabel(r'$x$', fontsize=28, labelpad=10)
+            ax.set_ylabel(r'$\Psi$', fontsize=28, labelpad=10)
+
+            ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.25))
+            ax.xaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(5))
+            #ax.yaxis.set_major_locator(mpl.ticker.MultipleLocator(0.5))
+            ax.yaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(5))
+
+            ax.grid(color='grey', which='major', linestyle='-', linewidth=0.5, alpha=0.4)
+
+            ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.1), ncols=2, frameon=False, fontsize=20)
+
+            plt.tight_layout()
+            
+        if save_fpath:
+            save_name = Path(save_fpath.name.split('.')[0] 
+                             + f'_mismatch_finder_{dim}_{step}' + '.' 
+                             + save_fpath.name.split('.')[-1])
+            plt.savefig((save_fpath.parent / save_name).as_posix())
+
+        plt.show()
 
     def plot_initial_data(self, save_fpath: Path, dim: str) -> None:
 
@@ -427,10 +504,207 @@ class ResultPlotter:
 
 
     def plot_echoing_period(self, save_fpath: Path) -> None:
-        pass
+        
+        input_dict = result_dict = {}
 
-    def plot_benchmark(self, save_fpath: Path) -> None:
-        pass
+        result_dict['dims'] = []
+        result_dict['periods'] = []
+        
+        if len(self.input_files) > 1:
+            fpaths = [Path(file) for file in self.input_files]
+            for fpath in fpaths:
+                with open(fpath.as_posix(), 'r') as f:
+                    tmp_dict = json.load(f)
+                input_dict.update(tmp_dict)
+            
+            for key in input_dict.keys():
+                if input_dict[key]['Converged'] == True:
+                    result_dict['dims'].append(input_dict[key]['Dim'])
+                    result_dict['periods'].append(input_dict[key]['Initial_Conditions']['Delta']) 
+
+        else:
+            fpath = Path(self.input_files[0])
+
+            with open(fpath.as_posix(), 'r') as f:
+                input_dict = json.load(f)
+            
+            for key in input_dict.keys():
+                if input_dict[key]['Converged'] == True:
+                    result_dict['dims'].append(input_dict[key]['Dim'])
+                    result_dict['periods'].append(input_dict[key]['Initial_Conditions']['Delta'])
+            
+        result_dict['dims'] = np.array(result_dict['dims'], dtype=np.float64)
+        result_dict['periods'] = np.array(result_dict['periods'], dtype=np.float64)
+        sorted_indices = np.argsort(result_dict['dims'])
+
+        dims = result_dict['dims'][sorted_indices]
+        periods = result_dict['periods'][sorted_indices]
+
+        period_max_arg = np.argmax(periods)
+        period_max = periods[period_max_arg]
+        dim_max = dims[period_max_arg] 
+
+        dim_low, _ = round_limits(dims.min(), dims.max())
+        _, period_high = round_limits(periods.min(), periods.max())
+
+        fig, ax = plt.subplots(figsize=(10,8))
+
+        ax.plot(dims, periods, label=r'present work', ls='-', color='#006699')
+        ax.plot(dim_max, period_max, label=r'$\Delta_{max}=$'+f'{period_max:.3f}', ls='',
+                marker='*', markersize=8)
+
+        ax.set_xlim(dim_low, 3.8)
+        ax.set_ylim(3, period_high)
+        ax.set_xlabel('Dimension D', fontsize=28, labelpad=10)
+        ax.set_ylabel(r'Echoing Period $\Delta$', fontsize=28, labelpad=10)
+
+        ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.5))
+        ax.xaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(5))
+        ax.yaxis.set_major_locator(mpl.ticker.MultipleLocator(0.5))
+        ax.yaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(5))
+
+        ax.grid(color='grey', which='major', linestyle='-', linewidth=0.5, alpha=0.4)
+
+        ax.legend(loc='Upper center', bbox_to_anchor=(0.5, 1.1), ncols=2, frameon=False, fontsize=20)
+
+        plt.tight_layout()
+
+        if save_fpath:
+            save_name = Path(save_fpath.name.split('.')[0] 
+                             + '_echoing-period' + '.'
+                             + save_fpath.name.split('.')[-1])
+            plt.savefig((save_fpath.parent / save_name).as_posix())
+
+        plt.show()
+
+    def plot_benchmark(self, save_fpath: Path, dim: str | float) -> None:
+        
+        assert len(self.input_files) == 1, "Only the path folder should be given for benchmark plots!"
+
+        fpath = Path(self.input_files[0]).absolute()
+
+        assert fpath.is_dir(), "The input path should be a folder, not a file!"
+
+        benchmark_files = glob((fpath / "benchmark").as_posix()+'*')
+        benchmark_files = [Path(file) for file in benchmark_files if dim in file]
+
+        result_omp = result_mpi = result_hybrid = {}
+
+        for file in benchmark_files:
+            kname = file.name.split('_')[2]
+            with open(file, 'r') as f:
+                tmp_dict = json.load(f)
+            mean_time = 0
+            newton_keys = [key for key in tmp_dict[0].keys() if 'NewtonStep' in key]
+            repetitions = tmp_dict['Repetitions']
+            mean_time = np.mean([tmp_dict[i]['OverallTime'] for i in range(repetitions)])
+            mean_newton_time = {key: 0 for key in newton_keys}
+            for i in range(repetitions):
+                for key in newton_keys:
+                    mean_newton_time[key] += tmp_dict[i][key]/repetitions
+
+            match kname:
+                case 'OpenMP':
+                    threads = tmp_dict['Threads']
+                    result_omp[threads].update({'OverallTime': mean_time}+mean_newton_time)
+                case 'MPI':
+                    cores = tmp_dict['Cores']
+                    result_mpi[cores].update({'OverallTime': mean_time}+mean_newton_time)
+                case 'Hybrid':
+                    cores = tmp_dict['Cores']
+                    threads = tmp_dict['Threads']
+                    result_hybrid[int(cores*threads)].update({'OverallTime': mean_time}+mean_newton_time)
+                case '_':
+                    raise ValueError(f'{kname} is not defined in the evaluation algorithm!')
+        
+        fig_o, ax_o = plt.subplots(figsize=(10,8))
+        max_speed_o = 0
+        max_procs_o = 0
+        num_o = len([di for di in [result_omp, result_mpi, result_hybrid] if di])
+        
+        for dic, kind in zip([result_omp, result_mpi, result_hybrid], ['OpenMp', 'MPI', 'Hybrid']):
+            
+            if dic:
+                fig, ax = plt.subplots(figsize=(10,8))
+                procs = np.array(sorted(list(dic.keys())))
+                max_procs_o = procs.max() if procs.max() > max_procs_o else max_procs_o
+                overall_times = []
+                newton_keys = [key for key in dic[procs[0]].keys() if 'NewtonStep' in key]
+                newton_dic = {key: [] for key in newton_keys}
+                for i, key in it.product(procs, newton_keys):
+                    newton_dic[key].append(dic[i][key])
+                    overall_times.append(dic[i]['OverallTime'])
+                
+                overall_times = np.array(list(map(lambda x: overall_times[0]/x, overall_times)))
+                max_speedup_o = overall_times.max() if overall_times.max() > max_speedup_o else max_speedup_o
+                max_speedup = 0
+
+                for key in newton_keys:
+                    newton_dic[key] = np.array(list(map(lambda x: newton_dic[key][0]/x, newton_dic[key])))
+                    max_speedup = newton_dic[key].max() if newton_dic[key].max() > max_speedup else max_speedup
+                
+                markers = ['o', 's', '^', 'D', 'v', '>', '<', 'P', '*']
+                colors = ['navy', 'goldenrod', 'darkviolet', 'teal', 'crimson', 
+                          'darkorange', 'forestgreen', 'indigo', 'maroon']
+
+                for key, marker, color in zip(newton_keys, markers, colors):
+                    ax.loglog(procs, newton_dic[key], marker=marker, markersize=5, color=color, ls='-', label=f'Newton Step {key[-1]}')
+                
+                _, ylim_max = round_limits(0, max_speedup)
+                ax.set_xlim(0, procs.max())
+                ax.set_ylim(0, ylim_max)
+
+                match kind:
+                    case 'OpenMp':
+                        ax.set_xlabel('Threads [-]', fontsize=28, labelpad=10)
+                        ax_o.loglog(procs, overall_times, marker='o', markersize=5, label='OpenMp', color='forestgreen')
+                    case 'MPI':
+                        ax.set_xlabel('Cores [-]', fontsize=28, labelpad=10)
+                        ax_o.loglog(procs, overall_times, marker='s', markersize=5, label='MPI', color='indigo')
+                    case 'Hybrid':
+                        ax.set_xlabel(r'Cores $\times$ Threads [-]', fontsize=28, labelpad=10)
+                        ax_o.loglog(procs, overall_times, marker='^', markersize=5, label='Hybrid', color='maroon')
+                                
+                ax.set_ylabel(r'Speed-Up [-]', fontsize=28, labelpad=10)
+
+                #ax.yaxis.set_major_locator(mpl.ticker.MultipleLocator(100))
+                #ax.yaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(2))
+
+                ax.grid(color='grey', which='major', linestyle='-', linewidth=0.5, alpha=0.4)
+
+                ax.legend(loc='Upper center', bbox_to_anchor=(0.5, 1.1), ncols=len(newton_keys), frameon=False, fontsize=20)
+
+                plt.tight_layout()
+
+                if save_fpath:
+                    save_name = Path(save_fpath.name.split('.')[0] 
+                                    + '_benchmark_' + f'NewtonSteps_{kind}' + '.'
+                                    + save_fpath.name.split('.')[-1])
+                    fig.savefig((save_fpath.parent / save_name).as_posix())
+
+                plt.show()
+        
+        
+        
+        _, ylim_max_o = round_limits(0, max_speedup_o)
+        ax_o.set_xlim(0, max_procs_o)
+        ax_o.set_ylim(0, ylim_max_o)
+        ax_o.set_xlabel('Cores [-]', fontsize=28, labelpad=10)
+        ax_o.set_ylabel(r'Speed-Up [-]', fontsize=28, labelpad=10)
+
+        ax_o.grid(color='grey', which='major', linestyle='-', linewidth=0.5, alpha=0.4)
+
+        ax_o.legend(loc='Upper center', bbox_to_anchor=(0.5, 1.1), ncols=num_o, frameon=False, fontsize=20)
+
+        plt.tight_layout()
+
+        if save_fpath:
+            save_name = Path(save_fpath.name.split('.')[0] 
+                            + '_benchmark_Overall' + '.'
+                            + save_fpath.name.split('.')[-1])
+            fig_o.savefig((save_fpath.parent / save_name).as_posix())
+
+        plt.show()
 
 
 # ============================ 5. Main Calculations ==============================
@@ -462,13 +736,13 @@ if __name__ == '__main__':
         '-k', '--kind',
         type=str,
         default='convergence',
-        choices=['convergence', 'fields', 'initial_data'],
+        choices=['convergence', 'fields', 'initial_data', 'echoing_period', 'benchmark',
+                 'mismatch_layer_finder'],
         help='Type of plot which should be produced.'
         )
     parser.add_argument(
         '-d', '--dim',
         type=float,
-        default='',
         help='Dimension which should be postprocessed'
     )
     
@@ -476,4 +750,4 @@ if __name__ == '__main__':
 
     plotter = ResultPlotter(args.input_files)
 
-    plotter.plot(args.kind, args.output_name, dim=f'{args.dim:.3f}')
+    plotter.plot(args.kind, args.output_name, dim=f'{args.dim:.3f}' if args.dim else '')
