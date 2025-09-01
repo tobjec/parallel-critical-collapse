@@ -19,15 +19,15 @@ void InitialConditionGenerator::computeLeftExpansion(
 
     fft.forwardFFT(f0, F0Hat);
     fft.differentiate(F0Hat, DfHat, Delta);
-    fft.inverseFFT(DfHat, df0dtau);
+    fft.backwardFFT(DfHat, df0dtau);
 
     fft.forwardFFT(df0dtau, D2fHat);
     fft.differentiate(D2fHat, D2fHat, Delta);
-    fft.inverseFFT(D2fHat, d2f0dtau2);
+    fft.backwardFFT(D2fHat, d2f0dtau2);
 
     fft.forwardFFT(d2f0dtau2, D3fHat);
     fft.differentiate(D3fHat, D3fHat, Delta);
-    fft.inverseFFT(D3fHat, d3f0dtau3);
+    fft.backwardFFT(D3fHat, d3f0dtau3);
 
     // Step 2: Solve inhomogeneous ODE for u1
     vec_real Coeff1(Ntau, 1.0), Coeff2(Ntau), u1;
@@ -46,19 +46,19 @@ void InitialConditionGenerator::computeLeftExpansion(
 
     fft.forwardFFT(u1, U1Hat);
     fft.differentiate(U1Hat, dU1Hat, Delta);
-    fft.inverseFFT(dU1Hat, du1dtau);
+    fft.backwardFFT(dU1Hat, du1dtau);
 
     fft.forwardFFT(du1dtau, d2U1Hat);
     fft.differentiate(d2U1Hat, d2U1Hat, Delta);
-    fft.inverseFFT(d2U1Hat, d2u1dtau2);
+    fft.backwardFFT(d2U1Hat, d2u1dtau2);
 
     fft.forwardFFT(d2u1dtau2, d3U1Hat);
     fft.differentiate(d3U1Hat, d3U1Hat, Delta);
-    fft.inverseFFT(d3U1Hat, d3u1dtau3);
+    fft.backwardFFT(d3U1Hat, d3u1dtau3);
 
     fft.forwardFFT(d3u1dtau3, d4U1Hat);
     fft.differentiate(d4U1Hat, d4U1Hat, Delta);
-    fft.inverseFFT(d4U1Hat, d4u1dtau4);
+    fft.backwardFFT(d4U1Hat, d4u1dtau4);
 
     // Step 4: Taylor expansions
     vec_real f2(Ntau), f4(Ntau),
@@ -234,10 +234,10 @@ void InitialConditionGenerator::computeRightExpansion(
 
     fft.forwardFFT(u0, U0Hat);
     fft.differentiate(U0Hat, dU0Hat, Delta);
-    fft.inverseFFT(dU0Hat, du0);
+    fft.backwardFFT(dU0Hat, du0);
 
     fft.differentiate(dU0Hat, d2U0Hat, Delta);
-    fft.inverseFFT(d2U0Hat, d2u0);
+    fft.backwardFFT(d2U0Hat, d2u0);
 
     // Step 2: Solve for ia20
     vec_real coeff1(Ntau), coeff2(Ntau), ia20, f0(Ntau, 1.0);
@@ -351,7 +351,7 @@ void InitialConditionGenerator::computeRightExpansion(
     vec_complex U2Hat, dU2Hat;
     fft.forwardFFT(u2, U2Hat);
     fft.differentiate(U2Hat, dU2Hat, Delta);
-    fft.inverseFFT(dU2Hat, du2);
+    fft.backwardFFT(dU2Hat, du2);
 
     // Step 5: Compute v2 via linear inhomogeneous solve
     #ifdef USE_HYBRID
@@ -619,9 +619,9 @@ void InitialConditionGenerator::unpackSpectralFields(const vec_real& Z,
     EvenF[Nnewton/3] = complex_t(Z[2*Nnewton/3+1]) / 2.0;
     EvenF[Nnewton] = complex_t(Z[2*Nnewton/3+1]) / 2.0;
 
-    fft.inverseFFT(Odd1F, Odd1);
-    fft.inverseFFT(Odd2F, Odd2);
-    fft.inverseFFT(EvenF, Even);
+    fft.backwardFFT(Odd1F, Odd1);
+    fft.backwardFFT(Odd2F, Odd2);
+    fft.backwardFFT(EvenF, Even);
 
 }
 
@@ -653,7 +653,7 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
 
     fft.differentiate(compVec1, compVec2, Delta);
 
-    fft.inverseFFT(compVec1, compVec1);    
+    fft.backwardFFT(compVec1, compVec1);    
 
     #ifdef USE_HYBRID
     #pragma omp parallel for schedule(static)
@@ -677,7 +677,7 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
     }
 
     // Derivatives
-    fft.inverseFFT(compVec2, compVec2);
+    fft.backwardFFT(compVec2, compVec2);
 
     #ifdef USE_HYBRID
     #pragma omp parallel for schedule(static)
@@ -725,7 +725,7 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
     fft.doubleModes(Y, compVec1);
     compVec1[2] = complex_t(-compVec1[compVec1.size()-2].real(), compVec1[2].imag());
 
-    fft.inverseFFT(compVec1, compVec1);
+    fft.backwardFFT(compVec1, compVec1);
 
     #ifdef USE_HYBRID
     #pragma omp parallel for schedule(static)

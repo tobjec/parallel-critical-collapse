@@ -51,8 +51,8 @@ int main()
 
     fft.forwardFFT(in_real, out_real);
     fft.forwardFFT(in_comp, out_comp);
-    fft.inverseFFT(out_real, ref_in_real);
-    fft.inverseFFT(out_comp, ref_in_comp);
+    fft.backwardFFT(out_real, ref_in_real);
+    fft.backwardFFT(out_comp, ref_in_comp);
 
     for (size_t i=0; i<out_comp.size(); ++i)
     {

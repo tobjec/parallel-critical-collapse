@@ -15,7 +15,7 @@ class ShootingSolver
         bool converged=false;
         int itsReached, maxIts;
     
-        void integrateToMidpoint(
+        void integrateToMatchPoint(
             const vec_complex& yInit, const vec_real& xGrid,
             size_t startIdx, size_t endIdx, bool forward,
             vec_complex& yFinal, bool Debug=false, json* fieldVals=nullptr);

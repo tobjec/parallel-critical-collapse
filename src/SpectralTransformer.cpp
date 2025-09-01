@@ -51,7 +51,7 @@ void SpectralTransformer::forwardFFT(const vec_real& in, vec_complex& out)
 
 }
 
-void SpectralTransformer::inverseFFT(const vec_complex& in, vec_real& out)
+void SpectralTransformer::backwardFFT(const vec_complex& in, vec_real& out)
 {
     for (size_t i=0; i<N; ++i)
     {
@@ -87,7 +87,7 @@ void SpectralTransformer::forwardFFT(const vec_complex& in, vec_complex& out)
 
 }
 
-void SpectralTransformer::inverseFFT(const vec_complex& in, vec_complex& out)
+void SpectralTransformer::backwardFFT(const vec_complex& in, vec_complex& out)
 {
     for (size_t i=0; i<N; ++i)
     {
@@ -220,7 +220,7 @@ void SpectralTransformer::solveInhom(const vec_real& f, const vec_real& g, vec_r
     vec_complex f_hat, F_hat;
     forwardFFT(f, f_hat);
     lamIntegrate(f_hat, F_hat, complex_t(0.0), period_);
-    inverseFFT(F_hat, x);
+    backwardFFT(F_hat, x);
 
     vec_real F_real = x;
     vec_real h(N);
@@ -233,7 +233,7 @@ void SpectralTransformer::solveInhom(const vec_real& f, const vec_real& g, vec_r
     vec_complex h_hat, H_hat;
     forwardFFT(h, h_hat);
     lamIntegrate(h_hat, H_hat, f_hat[0], period_);
-    inverseFFT(H_hat, x);
+    backwardFFT(H_hat, x);
 
     for (size_t i=0; i<N; ++i)
     {

@@ -9,13 +9,13 @@ ShootingSolver::ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, Initia
 void ShootingSolver::shoot(vec_complex& YLeft, vec_complex& YRight, const vec_real& gridX,
     size_t iLeft, size_t iRight, size_t iMid, vec_complex& mismatchOut, bool Debug, json* fieldVals)
 {
-    integrateToMidpoint(YLeft, gridX, iLeft, iMid, true, YLeft, Debug, fieldVals);
-    integrateToMidpoint(YRight, gridX, iRight, iMid, false, YRight, Debug, fieldVals);
+    integrateToMatchPoint(YLeft, gridX, iLeft, iMid, true, YLeft, Debug, fieldVals);
+    integrateToMatchPoint(YRight, gridX, iRight, iMid, false, YRight, Debug, fieldVals);
 
     computeMismatch(YLeft, YRight, mismatchOut);
 }
 
-void ShootingSolver::integrateToMidpoint(
+void ShootingSolver::integrateToMatchPoint(
     const vec_complex& Yinit, const vec_real& xGrid,
     size_t startIdx, size_t endIdx, bool forward,
     vec_complex& Yfinal, bool Debug, json* fieldVals)

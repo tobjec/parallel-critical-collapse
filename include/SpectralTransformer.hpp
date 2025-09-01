@@ -16,9 +16,9 @@ class SpectralTransformer
         ~SpectralTransformer();
 
         void forwardFFT(const vec_real& in, vec_complex& out);
-        void inverseFFT(const vec_complex& in, vec_real& out);
+        void backwardFFT(const vec_complex& in, vec_real& out);
         void forwardFFT(const vec_complex& in, vec_complex& out);
-        void inverseFFT(const vec_complex& in, vec_complex& out);
+        void backwardFFT(const vec_complex& in, vec_complex& out);
 
         void differentiate(const vec_complex& in, vec_complex& out, real_t period_=0.0);
         void lamIntegrate(const vec_complex& fk, vec_complex& out, complex_t lambda=complex_t(0.0), real_t period_=0.0);
