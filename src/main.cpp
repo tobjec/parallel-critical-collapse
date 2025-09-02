@@ -96,11 +96,7 @@ int main(int argc, char* argv[])
             json benchmark_results;
             SimulationConfig config = SimulationConfig::loadFromJson(inputPath);
 
-            if (ignoreConverged)
-            {
-                config.Converged = false;
-                config.PrecisionNewton = 1;
-            } 
+            if (ignoreConverged) config.Converged = false;
 
             benchmark_results["Dim"] = config.Dim;
             benchmark_results["Ntau"] = config.Ntau;
@@ -177,11 +173,7 @@ int main(int argc, char* argv[])
             // Load configuration
             SimulationConfig config = SimulationConfig::loadFromJson(inputPath);
 
-            if (ignoreConverged)
-            {
-                config.Converged = false;
-                config.PrecisionNewton = 1;
-            }
+            if (ignoreConverged) config.Converged = false;
 
             #if defined(USE_MPI) || defined(USE_HYBRID)
             if (rank==0)
@@ -324,11 +316,7 @@ int main(int argc, char* argv[])
 
                 }
 
-                if (ignoreConverged)
-                {
-                    config.Converged = false;
-                    config.PrecisionNewton = 1;
-                }
+                if (ignoreConverged) config.Converged = false;
                 
                 NewtonSolver solver(config, dataPath);
                 configSuite.multiInputDict[simDim] = solver.run();

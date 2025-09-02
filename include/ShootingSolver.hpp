@@ -21,8 +21,6 @@ class ShootingSolver
             vec_complex& yFinal, bool Debug=false, json* fieldVals=nullptr);
     
         void computeMismatch(const vec_complex& yLeft, const vec_complex& yRight, vec_complex& mismatchOut);
-        real_t computeL2Norm(const vec_real& vc);
-        real_t computeMaxNorm(const vec_real& vc);
             
     public:
         ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, InitialConditionGenerator& initGen_, int maxIts_);

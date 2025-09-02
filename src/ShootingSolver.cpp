@@ -44,31 +44,16 @@ void ShootingSolver::integrateToMatchPoint(
                 #endif
             }
 
-            if (Debug && fieldVals)
+            if (Debug && (i%100==0 || i==endIdx-1) && fieldVals)
             {
                 initGen.StateVectorToFields(Y1, U, V, f, A, dUdt, dVdt, dFdt, xGrid[i]); 
                 
                 std::for_each(A.begin(), A.end(), [](auto& ele){ele=std::sqrt(1/ele);});
 
-                real_t U_max = computeMaxNorm(U);
-                real_t V_max = computeMaxNorm(V);
-                real_t f_max = computeMaxNorm(f);
-                real_t A_max = computeMaxNorm(A);
-
-                real_t U_l2 = computeL2Norm(U);
-                real_t V_l2 = computeL2Norm(V);
-                real_t f_l2 = computeL2Norm(f);
-                real_t A_l2 = computeL2Norm(A);
-
-                (*fieldVals)[std::to_string(xGrid[i])]["A_max"] = A_max;
-                (*fieldVals)[std::to_string(xGrid[i])]["U_max"] = U_max;
-                (*fieldVals)[std::to_string(xGrid[i])]["V_max"] = V_max;
-                (*fieldVals)[std::to_string(xGrid[i])]["f_max"] = f_max;
-
-                (*fieldVals)[std::to_string(xGrid[i])]["A_l2"] = A_l2;
-                (*fieldVals)[std::to_string(xGrid[i])]["U_l2"] = U_l2;
-                (*fieldVals)[std::to_string(xGrid[i])]["V_l2"] = V_l2;
-                (*fieldVals)[std::to_string(xGrid[i])]["f_l2"] = f_l2;
+                (*fieldVals)[std::to_string(xGrid[i])]["A"] = A;
+                (*fieldVals)[std::to_string(xGrid[i])]["U"] = U;
+                (*fieldVals)[std::to_string(xGrid[i])]["V"] = V;
+                (*fieldVals)[std::to_string(xGrid[i])]["f"] = f;
             }
 
             Y1 = Y2;
@@ -97,32 +82,16 @@ void ShootingSolver::integrateToMatchPoint(
                 #endif
             }
 
-            if (Debug && fieldVals)
+            if (Debug && (i%100==0 || i==endIdx+1 || i==startIdx) && fieldVals)
             {
                 initGen.StateVectorToFields(Y1, U, V, f, A, dUdt, dVdt, dFdt, xGrid[i]); 
                 
                 std::for_each(A.begin(), A.end(), [](auto& ele){ele=std::sqrt(1/ele);});
 
-                real_t U_max = computeMaxNorm(U);
-                real_t V_max = computeMaxNorm(V);
-                real_t f_max = computeMaxNorm(f);
-                real_t A_max = computeMaxNorm(A);
-
-                real_t U_l2 = computeL2Norm(U);
-                real_t V_l2 = computeL2Norm(V);
-                real_t f_l2 = computeL2Norm(f);
-                real_t A_l2 = computeL2Norm(A);
-
-                (*fieldVals)[std::to_string(xGrid[i])]["A_max"] = A_max;
-                (*fieldVals)[std::to_string(xGrid[i])]["U_max"] = U_max;
-                (*fieldVals)[std::to_string(xGrid[i])]["V_max"] = V_max;
-                (*fieldVals)[std::to_string(xGrid[i])]["f_max"] = f_max;
-
-                (*fieldVals)[std::to_string(xGrid[i])]["A_l2"] = A_l2;
-                (*fieldVals)[std::to_string(xGrid[i])]["U_l2"] = U_l2;
-                (*fieldVals)[std::to_string(xGrid[i])]["V_l2"] = V_l2;
-                (*fieldVals)[std::to_string(xGrid[i])]["f_l2"] = f_l2;
-            
+                (*fieldVals)[std::to_string(xGrid[i])]["A"] = A;
+                (*fieldVals)[std::to_string(xGrid[i])]["U"] = U;
+                (*fieldVals)[std::to_string(xGrid[i])]["V"] = V;
+                (*fieldVals)[std::to_string(xGrid[i])]["f"] = f;
             }
 
             Y1 = Y2;
@@ -157,16 +126,4 @@ void ShootingSolver::computeMismatch(
 
     // Enforce consistency of Delta value
     mismatchOut[2] = complex_t(yLeft[2].real(), mismatchOut[2].imag());
-}
-
-real_t ShootingSolver::computeL2Norm(const vec_real& vc)
-{
-    real_t sum = std::transform_reduce(vc.cbegin(), vc.cend(), 0.0, std::plus{},
-                                       [](auto x){return x*x;});
-    return std::sqrt(sum / static_cast<real_t>(vc.size()));
-}
-
-real_t ShootingSolver::computeMaxNorm(const vec_real& vc)
-{
-    return *(std::max_element(vc.begin(), vc.end()));
 }
