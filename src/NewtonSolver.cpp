@@ -74,7 +74,6 @@ json NewtonSolver::run(json* benchmark_result)
                 {
                     Debug = config.Debug;
                     json fieldVals;
-                    fieldVals["Delta"] = Delta;
                     shoot(in0, out0, &fieldVals);
                     auto fieldPath = baseFolder / ("fields_"+std::to_string(Dim)+"_"+std::to_string(its)+".json");
                     OutputWriter::writeJsonToFile(fieldPath.c_str(), fieldVals);
