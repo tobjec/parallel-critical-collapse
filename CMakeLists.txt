@@ -35,6 +35,8 @@ set(msvc_like "$<COMPILE_LANG_AND_ID:CXX,MSVC>")
 target_compile_options(critical_collapse_flags INTERFACE
   "$<${gcc_like}:-Wall;-Wextra;-Wpedantic;-Wshadow;-Wformat=2;-Wunused>"
   "$<${msvc_like}:/W3>"
+  "$<$<AND:${gcc_like},$<CONFIG:Release>>:-O3;-DNDEBUG;-march=native>"
+  "$<$<AND:${msvc_like},$<CONFIG:Release>>:/O2;/DNDEBUG>"
 )
 
 # ─────────────────────────── 5. include path  ───────────────────────────────
