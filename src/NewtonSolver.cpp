@@ -45,6 +45,7 @@ json NewtonSolver::run(json* benchmark_result)
         real_t errOld = 1.0;
         real_t overallTimeStart{}, overallTimeEnd{};
         real_t newtonTimeStart{}, newtonTimeEnd{};
+        real_t assembleTimeStart{}, assembleTimeEnd{}; 
         
         if (rank==0 && benchmark)
         {
@@ -140,7 +141,18 @@ json NewtonSolver::run(json* benchmark_result)
             }
 
             mat_real J(Nnewton, vec_real(Nnewton));
-            assembleJacobian(in0, out0, J);        
+            if (rank==0 && benchmark)
+            {
+                assembleTimeStart = MPI_Wtime();
+            } 
+
+            assembleJacobian(in0, out0, J);
+            
+            if (rank==0 && benchmark)
+            {
+                assembleTimeEnd = MPI_Wtime();
+                (*benchmark_result)["AssembleStep"+std::to_string(its+1)] = assembleTimeEnd - assembleTimeStart;
+            }        
 
             if (rank==0)
             {
@@ -220,6 +232,7 @@ json NewtonSolver::run(json* benchmark_result)
         real_t errOld = 1.0;
         std::chrono::_V2::system_clock::time_point overallTimeStart{}, overallTimeEnd{};
         std::chrono::_V2::system_clock::time_point newtonTimeStart{}, newtonTimeEnd{};
+        std::chrono::_V2::system_clock::time_point assembleTimeStart{}, assembleTimeEnd{};
 
         if (benchmark)
         {
@@ -287,7 +300,20 @@ json NewtonSolver::run(json* benchmark_result)
             }
 
             mat_real J(Nnewton, vec_real(Nnewton));
+            if (benchmark)
+            {
+                assembleTimeStart = std::chrono::high_resolution_clock::now();
+            }
+
             assembleJacobian(in0, out0, J);
+
+            if (benchmark)
+            {
+                assembleTimeEnd = std::chrono::high_resolution_clock::now();
+                (*benchmark_result)["AssembleStep"+std::to_string(its+1)] = 
+                static_cast<double>((assembleTimeEnd - assembleTimeStart).count()) / 1e9;
+            }
+
 
             if (config.Debug)
             {
