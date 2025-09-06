@@ -38,19 +38,20 @@ NewtonSolver::~NewtonSolver()
 
 json NewtonSolver::run(json* benchmark_result)
 {
+    real_t overallTimeStart{}, overallTimeEnd{};
+    real_t newtonTimeStart{}, newtonTimeEnd{};
+    real_t assembleTimeStart{}, assembleTimeEnd{};
+
+    if (rank==0 && benchmark)
+    {
+        overallTimeStart = MPI_Wtime();    
+    }
+
     if (!Converged)
     {
         real_t err = 1.0;
         real_t fac = 1.0;
-        real_t errOld = 1.0;
-        real_t overallTimeStart{}, overallTimeEnd{};
-        real_t newtonTimeStart{}, newtonTimeEnd{};
-        real_t assembleTimeStart{}, assembleTimeEnd{}; 
-        
-        if (rank==0 && benchmark)
-        {
-            overallTimeStart = MPI_Wtime();    
-        }
+        real_t errOld = 1.0;      
 
         initGen.packSpectralFields(Up, psic, fc, in0);
         in0[2*Nnewton/3+2] = Delta;
@@ -110,11 +111,6 @@ json NewtonSolver::run(json* benchmark_result)
                 in0[2*Nnewton/3+2] = 0.0;
                 initGen.unpackSpectralFields(in0, Up, psic, fc);
                 writeFinalOutput(its, err);
-                if (rank==0 && benchmark)
-                {
-                    overallTimeEnd = MPI_Wtime();
-                    (*benchmark_result)["OverallTime"] = overallTimeEnd - overallTimeStart;   
-                }
                 break;
             }
             else
@@ -151,7 +147,7 @@ json NewtonSolver::run(json* benchmark_result)
             if (rank==0 && benchmark)
             {
                 assembleTimeEnd = MPI_Wtime();
-                (*benchmark_result)["AssembleStep"+std::to_string(its+1)] = assembleTimeEnd - assembleTimeStart;
+                (*benchmark_result)["AssembleStep_"+std::to_string(its+1)] = assembleTimeEnd - assembleTimeStart;
             }        
 
             if (rank==0)
@@ -183,7 +179,7 @@ json NewtonSolver::run(json* benchmark_result)
                 if (benchmark)
                 {
                     newtonTimeEnd = MPI_Wtime();
-                    (*benchmark_result)["NewtonStep"+std::to_string(its+1)] = newtonTimeEnd - newtonTimeStart;
+                    (*benchmark_result)["NewtonStep_"+std::to_string(its+1)] = newtonTimeEnd - newtonTimeStart;
                 }
             }
             
@@ -218,6 +214,12 @@ json NewtonSolver::run(json* benchmark_result)
 
     }
 
+    if (rank==0 && benchmark)
+    {
+        overallTimeEnd = MPI_Wtime();
+        (*benchmark_result)["OverallTime"] = overallTimeEnd - overallTimeStart;   
+    }
+
     return resultDict;
 
 }
@@ -225,19 +227,20 @@ json NewtonSolver::run(json* benchmark_result)
 #else
 json NewtonSolver::run(json* benchmark_result)
 {
+    std::chrono::_V2::system_clock::time_point overallTimeStart{}, overallTimeEnd{};
+    std::chrono::_V2::system_clock::time_point newtonTimeStart{}, newtonTimeEnd{};
+    std::chrono::_V2::system_clock::time_point assembleTimeStart{}, assembleTimeEnd{};
+
+    if (benchmark)
+    {
+        overallTimeStart = std::chrono::high_resolution_clock::now();
+    }
+
     if (!Converged)
     {
         real_t fac = 1.0;
         real_t err = 1.0;
         real_t errOld = 1.0;
-        std::chrono::_V2::system_clock::time_point overallTimeStart{}, overallTimeEnd{};
-        std::chrono::_V2::system_clock::time_point newtonTimeStart{}, newtonTimeEnd{};
-        std::chrono::_V2::system_clock::time_point assembleTimeStart{}, assembleTimeEnd{};
-
-        if (benchmark)
-        {
-            overallTimeStart = std::chrono::high_resolution_clock::now();
-        }
 
         initGen.packSpectralFields(Up, psic, fc, in0);
         in0[2*Nnewton/3+2] = Delta;
@@ -278,11 +281,7 @@ json NewtonSolver::run(json* benchmark_result)
                 Converged = true;
                 std::cout << "The solution has converged!" << std::endl << std::endl;
                 writeFinalOutput(its, err);
-                if (benchmark)
-                {
-                    overallTimeEnd = std::chrono::high_resolution_clock::now();
-                    (*benchmark_result)["OverallTime"] = static_cast<double>((overallTimeEnd - overallTimeStart).count()) / 1e9; 
-                }
+                
                 break;
             }
 
@@ -310,7 +309,7 @@ json NewtonSolver::run(json* benchmark_result)
             if (benchmark)
             {
                 assembleTimeEnd = std::chrono::high_resolution_clock::now();
-                (*benchmark_result)["AssembleStep"+std::to_string(its+1)] = 
+                (*benchmark_result)["AssembleStep_"+std::to_string(its+1)] = 
                 static_cast<double>((assembleTimeEnd - assembleTimeStart).count()) / 1e9;
             }
 
@@ -342,7 +341,7 @@ json NewtonSolver::run(json* benchmark_result)
             if (benchmark)
             {
                 newtonTimeEnd = std::chrono::high_resolution_clock::now();
-                (*benchmark_result)["NewtonStep"+std::to_string(its+1)] = 
+                (*benchmark_result)["NewtonStep_"+std::to_string(its+1)] = 
                 static_cast<double>((newtonTimeEnd - newtonTimeStart).count()) / 1e9;
             }
         }
@@ -363,6 +362,12 @@ json NewtonSolver::run(json* benchmark_result)
         real_t err = computeL2Norm(out0);
         std::cout << "The solution is already marked as converged!" << std::endl;
         writeFinalOutput(0, err);
+    }
+
+    if (benchmark)
+    {
+        overallTimeEnd = std::chrono::high_resolution_clock::now();
+        (*benchmark_result)["OverallTime"] = static_cast<double>((overallTimeEnd - overallTimeStart).count()) / 1e9; 
     }
 
     return resultDict;
