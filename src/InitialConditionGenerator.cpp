@@ -239,11 +239,231 @@ void InitialConditionGenerator::computeRightExpansion(
     fft.differentiate(dU0Hat, d2U0Hat, Delta);
     fft.backwardFFT(d2U0Hat, d2u0);
 
-    // Step 2: Solve for ia20
     vec_real coeff1(Ntau), coeff2(Ntau), ia20, f0(Ntau, 1.0);
+    vec_real v0;
+    vec_real f1(Ntau), u1(Ntau), ia21(Ntau), v1(Ntau);
+    vec_real f2(Ntau), ia22(Ntau), u2(Ntau), du2(Ntau), v2(Ntau);
+    vec_complex U2Hat, dU2Hat;
+    vec_real f3(Ntau), ia23(Ntau), u3(Ntau), v3(Ntau);
+    vec_real F(Ntau), U(Ntau), V(Ntau);
+
     #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
+    #pragma omp parallel
+    {
+
+        #pragma omp for schedule(static)
+        for (size_t j=0; j<Ntau; ++j)
+        {
+            coeff1[j] = 3.0 - d - std::pow(d - 2.0, 3) * u0[j] * u0[j] / 4.0;
+            coeff2[j] = d - 3.0;
+        }
+
+        #pragma omp single
+        {
+            fft.solveInhom(coeff1, coeff2, ia20, Delta);
+        }   
+
+        
+        #pragma omp for schedule(static)
+        for (size_t j=0; j<Ntau; ++j)
+        {
+            coeff1[j] = (6.0 - 2.0 * d + (d - 2.0) * ia20[j]) / (2.0 * ia20[j]);
+            coeff2[j] = (d - 2.0) * u0[j] / 2.0;
+        }
+
+        #pragma omp single
+        {
+            fft.solveInhom(coeff1, coeff2, v0, Delta);
+        }
+
+        #pragma omp for schedule(static)
+        for (size_t j=0; j<Ntau; ++j)
+        {
+            f1[j] = 3.0 - d + (d - 3.0) / ia20[j];
+
+            ia21[j] = - ia20[j] * (8.0 * (d - 3.0)
+                    + std::pow(d - 2.0, 3) * (u0[j] * u0[j] + v0[j] * v0[j]))
+                    / 8.0 + d - 3.0;
+
+            u1[j] = ((d - 2.0 - 2.0 * (d - 3.0) / ia20[j]) * u0[j]
+                    + (d - 2.0) * v0[j]) / 4.0 - du0[j] / 2.0;
+        }
+
+        #pragma omp for schedule(static)
+        for (size_t j=0; j<Ntau; ++j)
+        {
+            coeff1[j] = (6.0 - 2.0 * d + d * ia20[j] - 2.0 * f1[j] * ia20[j])
+                        / (2.0 * ia20[j]);
+
+            coeff2[j] = (
+                2.0 * (3.0 - d) * (f1[j] - 1.0) * ia20[j] * v0[j]
+            + 2.0 * (d - 3.0) * ia21[j] * v0[j]
+            + (d - 2.0) * std::pow(ia20[j], 2) *
+                ((f1[j] - 1.0) * u0[j] + u1[j] + (f1[j] - 1.0) * v0[j])
+            ) / (2.0 * std::pow(ia20[j], 2));
+        }
+
+        #pragma omp single
+        {
+            fft.solveInhom(coeff1, coeff2, v1, Delta);
+        }
+
+        #pragma omp for schedule(static)
+        for (size_t j=0; j<Ntau; ++j)
+        {
+            f2[j] = (d - 3.0) * ((f1[j] - 1.0) * (1.0 - ia20[j]) * ia20[j] - ia21[j]) /
+                    (2.0 * std::pow(ia20[j], 2));
+
+            ia22[j] = (3.0 - d
+                    - (ia21[j] - ia20[j]) * (8.0 * (d - 3.0)
+                    + std::pow(d - 2.0, 3) * (std::pow(u0[j], 2) + std::pow(v0[j], 2))) / 8.0
+                    - std::pow(d - 2.0, 3) * ia20[j] * (u0[j] * u1[j] + v0[j] * v1[j]) / 4.0) / 2.0;
+
+            const real_t A = 4.0 * (3.0 - d) * (d - 6.0 + f1[j]) * ia20[j];
+            const real_t B = (d - 2.0) * (d - 8.0 + 2.0 * f1[j]) * std::pow(ia20[j], 2);
+            const real_t C = 4.0 * (d - 3.0) * (d - 3.0 + 2.0 * ia21[j]);
+            const real_t D = -(d - 3.0) * std::pow(d - 2.0, 3) * ia20[j] * std::pow(u0[j], 3);
+            const real_t E = (4.0 * (6.0 - 2.0 * d + (d - 2.0) * ia20[j]) * u1[j]
+                            + (d - 2.0) * v0[j] * (6.0 - 2.0 * d + (d - 8.0 + 2.0 * f1[j]) * ia20[j])
+                            - 8.0 * ia20[j] * v1[j] + 4.0 * d * ia20[j] * v1[j]
+                            - 12.0 * du0[j] + 4.0 * d * du0[j]
+                            + 8.0 * ia20[j] * du0[j] - 2.0 * d * ia20[j] * du0[j]
+                            + 4.0 * f1[j] * ia20[j] * du0[j]
+                            + 4.0 * ia20[j] * d2u0[j]) * ia20[j];
+
+            u2[j] = (A + B + C) * u0[j] + D + E;
+            u2[j] /= 32.0 * std::pow(ia20[j], 2);
+        }
+
+        #pragma omp single
+        {
+            fft.forwardFFT(u2, U2Hat);
+            fft.differentiate(U2Hat, dU2Hat, Delta);
+            fft.backwardFFT(dU2Hat, du2);
+        }
+
+        #pragma omp for schedule(static)
+        for (size_t j=0; j<Ntau; ++j)
+        {
+            coeff1[j] = 1.0 + d / 2.0 - 2.0 * f1[j] + (3.0 - d) / ia20[j];
+
+            coeff2[j] =
+                (2.0 * (3.0 - d) * std::pow(ia21[j], 2) * v0[j]
+                + 2.0 * (d - 3.0) * std::pow(ia20[j], 2) *
+                    ((f1[j] - 1.0 - f2[j]) * v0[j] - (f1[j] - 1.0) * v1[j])
+                + ((d - 2.0) *
+                        ((1.0 - f1[j] + f2[j]) * u0[j]
+                        + (f1[j] - 1.0) * u1[j]
+                        + u2[j]
+                        + (1.0 - f1[j] + f2[j]) * v0[j])
+                    + ((d - 2.0) * (f1[j] - 1.0) - 2.0 * f2[j]) * v1[j])
+                    * std::pow(ia20[j], 3)
+                + 2.0 * (d - 3.0) * ia20[j] *
+                    (ia22[j] * v0[j]
+                    + ia21[j] * ((f1[j] - 1.0) * v0[j] + v1[j])))
+                / (2.0 * std::pow(ia20[j], 3));
+        }
+
+        #pragma omp single
+        {
+            fft.solveInhom(coeff1, coeff2, v2, Delta);
+        }
+        
+        #pragma omp for schedule(static)
+        for (size_t j=0; j<Ntau; ++j)
+        {
+            f3[j] = ((-3.0 + d) * ((1.0 - f1[j] + f2[j]) * std::pow(ia20[j], 2)
+                + (-1.0 + f1[j] - f2[j]) * std::pow(ia20[j], 3)
+                + std::pow(ia21[j], 2)
+                - ia20[j] * ((-1.0 + f1[j]) * ia21[j] + ia22[j])))
+                / (3.0 * std::pow(ia20[j], 3));
+
+            ia23[j] = (-3.0 + d 
+                + ( -((ia20[j] - ia21[j] + ia22[j]) * (8.0 * (-3.0 + d) 
+                    + std::pow(d - 2.0, 3) * (u0[j] * u0[j] + v0[j] * v0[j])))
+                    + 2.0 * std::pow(d - 2.0, 3) * (ia20[j] - ia21[j]) 
+                    * (u0[j] * u1[j] + v0[j] * v1[j]) 
+                    - std::pow(d - 2.0, 3) * ia20[j] 
+                    * (std::pow(u1[j], 2) + 2.0 * u0[j] * u2[j] 
+                    + std::pow(v1[j], 2) + 2.0 * v0[j] * v2[j])) / 8.0)
+                / 3.0;
+
+            u3[j] = -(16.0 * (-3.0 + d) * std::pow(ia21[j], 2) * u0[j] 
+                + 4.0 * (-3.0 + d) * ia20[j]
+                    * ((-3.0 + d + f1[j] * (-3.0 + d - 2.0 * ia21[j]) 
+                    + 6.0 * ia21[j] - 4.0 * ia22[j]) * u0[j] 
+                    - 4.0 * ia21[j] * u1[j])
+                - (d - 3.0) * std::pow(ia20[j], 2)
+                    * (4.0 * (-10.0 + d + f1[j] * (-1.0 + d + f1[j]) - 2.0 * f2[j]) * u0[j] 
+                    + std::pow(d - 2.0, 3) * (1.0 + f1[j]) * std::pow(u0[j], 3) 
+                    + 2.0 * (-4.0 * (-3.0 + f1[j]) * u1[j] - 8.0 * u2[j] 
+                    + (1.0 + f1[j]) * (-2.0 * du0[j] + (d - 2.0) * v0[j])))
+                + std::pow(ia20[j], 3)
+                    * (8.0 * du0[j] - 2.0 * d * du0[j] 
+                    + 12.0 * du0[j] * f1[j] - 2.0 * d * du0[j] * f1[j] 
+                    + 4.0 * du0[j] * std::pow(f1[j], 2) 
+                    + 4.0 * d2u0[j] * (1.0 + f1[j]) 
+                    - 8.0 * du0[j] * f2[j] 
+                    + (d - 2.0) * (-16.0 + d + f1[j] * (2.0 + d + 2.0 * f1[j]) - 4.0 * f2[j]) * u0[j] 
+                    - 4.0 * (d - 2.0) * (-3.0 + f1[j]) * u1[j] 
+                    + 16.0 * u2[j] - 8.0 * d * u2[j] 
+                    + 32.0 * v0[j] - 18.0 * d * v0[j] + std::pow(d, 2) * v0[j] 
+                    - 4.0 * f1[j] * v0[j] + std::pow(d, 2) * f1[j] * v0[j] 
+                    - 4.0 * std::pow(f1[j], 2) * v0[j] 
+                    + 2.0 * d * std::pow(f1[j], 2) * v0[j] 
+                    + 8.0 * f2[j] * v0[j] - 4.0 * d * f2[j] * v0[j] 
+                    - 24.0 * v1[j] + 12.0 * d * v1[j] 
+                    + 8.0 * f1[j] * v1[j] - 4.0 * d * f1[j] * v1[j] 
+                    + 16.0 * v2[j] - 8.0 * d * v2[j] 
+                    + 16.0 * du2[j]))
+                / (96.0 * std::pow(ia20[j], 3));
+            
+            coeff1[j] = 2.0 + d / 2.0 - 3.0 * f1[j] + (3.0 - d) / ia20[j];
+
+            coeff2[j] = ((d - 3.0) * std::pow(ia21[j], 3) * v0[j]) / std::pow(ia20[j], 4)
+                    - ((d - 3.0) * ia21[j]
+                    * (2.0 * ia22[j] * v0[j]
+                    + ia21[j] * ((-1.0 + f1[j]) * v0[j] + v1[j])))
+                    / std::pow(ia20[j], 3)
+                    - ((d - 3.0) * ((-1.0 + f1[j] - f2[j] + f3[j]) * v0[j]
+                    + (1.0 - f1[j] + f2[j]) * v1[j]
+                    + (-1.0 + f1[j]) * v2[j])) / ia20[j]
+                    + ((d - 2.0) * (-1.0 + f1[j] - f2[j] + f3[j]) * u0[j]
+                    - (d - 2.0) * (-1.0 + f1[j] - f2[j]) * u1[j]
+                    + 2.0 * u2[j] - d * u2[j]
+                    - 2.0 * f1[j] * u2[j] + d * f1[j] * u2[j]
+                    - 2.0 * u3[j] + d * u3[j]
+                    + 2.0 * v0[j] - d * v0[j]
+                    - 2.0 * f1[j] * v0[j] + d * f1[j] * v0[j]
+                    + 2.0 * f2[j] * v0[j] - d * f2[j] * v0[j]
+                    - 2.0 * f3[j] * v0[j] + d * f3[j] * v0[j]
+                    - 2.0 * v1[j] + d * v1[j]
+                    + 2.0 * f1[j] * v1[j] - d * f1[j] * v1[j]
+                    - 2.0 * f2[j] * v1[j] + d * f2[j] * v1[j]
+                    - 2.0 * f3[j] * v1[j]
+                    + ((d - 2.0) * (-1.0 + f1[j]) - 4.0 * f2[j]) * v2[j]) / 2.0
+                    + ((d - 3.0) * (ia23[j] * v0[j]
+                    + ia22[j] * ((-1.0 + f1[j]) * v0[j] + v1[j])
+                    + ia21[j] * ((1.0 - f1[j] + f2[j]) * v0[j]
+                    + (-1.0 + f1[j]) * v1[j] + v2[j]))) / std::pow(ia20[j], 2);
+        }
+
+        #pragma omp single
+        {
+            fft.solveInhom(coeff1, coeff2, v3, Delta);
+        }
+
+        #pragma omp for schedule(static)
+        for (size_t j=0; j<Ntau; ++j)
+        {
+            F[j] = f0[j] + dx * f1[j] + dx * dx * f2[j] + dx * dx * dx * f3[j];
+            U[j] = u0[j] + dx * u1[j] + dx * dx * u2[j] + dx * dx * dx * u3[j];
+            V[j] = v0[j] + dx * v1[j] + dx * dx * v2[j] + dx * dx * dx * v3[j];
+        }
+    }
+
+    #else
+
     for (size_t j=0; j<Ntau; ++j)
     {
         coeff1[j] = 3.0 - d - std::pow(d - 2.0, 3) * u0[j] * u0[j] / 4.0;
@@ -252,10 +472,6 @@ void InitialConditionGenerator::computeRightExpansion(
     fft.solveInhom(coeff1, coeff2, ia20, Delta);
 
     // Step 3: Solve for v0
-    vec_real v0;
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau; ++j)
     {
         coeff1[j] = (6.0 - 2.0 * d + (d - 2.0) * ia20[j]) / (2.0 * ia20[j]);
@@ -263,13 +479,7 @@ void InitialConditionGenerator::computeRightExpansion(
     }
     fft.solveInhom(coeff1, coeff2, v0, Delta);
 
-    // Order 1
-    vec_real f1(Ntau), u1(Ntau), ia21(Ntau), v1(Ntau);
-
     // f0 is already set to 1.0
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau; ++j)
     {
         f1[j] = 3.0 - d + (d - 3.0) / ia20[j];
@@ -283,9 +493,6 @@ void InitialConditionGenerator::computeRightExpansion(
     }
 
     // Solve linear inhomogeneous ODE for v1
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau; ++j)
     {
         coeff1[j] = (6.0 - 2.0 * d + d * ia20[j] - 2.0 * f1[j] * ia20[j])
@@ -302,11 +509,6 @@ void InitialConditionGenerator::computeRightExpansion(
     fft.solveInhom(coeff1, coeff2, v1, Delta);
 
     // Order 2
-    vec_real f2(Ntau), ia22(Ntau), u2(Ntau), du2(Ntau), v2(Ntau);
-
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau; ++j)
     {
         f2[j] = (d - 3.0) * ((f1[j] - 1.0) * (1.0 - ia20[j]) * ia20[j] - ia21[j]) /
@@ -314,9 +516,6 @@ void InitialConditionGenerator::computeRightExpansion(
     }
 
     // Step 2: Compute ia22
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau; ++j)
     {
         ia22[j] = (3.0 - d
@@ -326,9 +525,6 @@ void InitialConditionGenerator::computeRightExpansion(
     }
 
     // Step 3: Compute u2
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau; ++j)
     {
         const real_t A = 4.0 * (3.0 - d) * (d - 6.0 + f1[j]) * ia20[j];
@@ -348,15 +544,12 @@ void InitialConditionGenerator::computeRightExpansion(
     }
 
     // Step 4: Differentiate u2
-    vec_complex U2Hat, dU2Hat;
+    
     fft.forwardFFT(u2, U2Hat);
     fft.differentiate(U2Hat, dU2Hat, Delta);
     fft.backwardFFT(dU2Hat, du2);
 
     // Step 5: Compute v2 via linear inhomogeneous solve
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau; ++j)
     {
         coeff1[j] = 1.0 + d / 2.0 - 2.0 * f1[j] + (3.0 - d) / ia20[j];
@@ -382,10 +575,6 @@ void InitialConditionGenerator::computeRightExpansion(
     fft.solveInhom(coeff1, coeff2, v2, Delta);
 
     // Order 3
-    vec_real f3(Ntau), ia23(Ntau), u3(Ntau), v3(Ntau);
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau; ++j)
     {
         f3[j] = ((-3.0 + d) * ((1.0 - f1[j] + f2[j]) * std::pow(ia20[j], 2)
@@ -436,9 +625,6 @@ void InitialConditionGenerator::computeRightExpansion(
     }
 
     // v3 via solving inhomogeneous equation
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau; ++j)
     {
         coeff1[j] = 2.0 + d / 2.0 - 3.0 * f1[j] + (3.0 - d) / ia20[j];
@@ -474,18 +660,14 @@ void InitialConditionGenerator::computeRightExpansion(
     fft.solveInhom(coeff1, coeff2, v3, Delta);
 
     // Construct final fields
-
-    vec_real F(Ntau), U(Ntau), V(Ntau);
-
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau; ++j)
     {
         F[j] = f0[j] + dx * f1[j] + dx * dx * f2[j] + dx * dx * dx * f3[j];
         U[j] = u0[j] + dx * u1[j] + dx * dx * u2[j] + dx * dx * dx * u3[j];
         V[j] = v0[j] + dx * v1[j] + dx * dx * v2[j] + dx * dx * dx * v3[j];
     }
+
+    #endif
 
     FieldsToStateVector(U, V, F, Y);
 
@@ -567,9 +749,9 @@ void InitialConditionGenerator::packSpectralFields(
 
     Z.resize(Nnewton);
 
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
+    //#ifdef USE_HYBRID
+    //#pragma omp parallel for schedule(static)
+    //#endif
     for (size_t j=0; j<Nnewton/6; ++j)
     {
         Z[2*j] = Odd1F[2*j+1].real();
@@ -592,9 +774,9 @@ void InitialConditionGenerator::unpackSpectralFields(const vec_real& Z,
     vec_complex Odd2F(Ntau/2, complex_t(0.0));
     vec_complex EvenF(Ntau/2, complex_t(0.0));
 
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
+    //#ifdef USE_HYBRID
+    //#pragma omp parallel for schedule(static)
+    //#endif
     for (size_t j=0; j<Nnewton/6; ++j)
     {
         Odd1F[2*j+1] = complex_t(Z[2*j], Z[2*j+1]);
@@ -630,9 +812,9 @@ void InitialConditionGenerator::FieldsToStateVector(const vec_real& U, const vec
 {
     Y.resize(Ntau);
 
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
+    //#ifdef USE_HYBRID
+    //#pragma omp parallel for schedule(static)
+    //#endif
     for (size_t j=0; j<Ntau; ++j)
     {
         Y[j] = complex_t(U[j], V[j] + F[j]);
@@ -647,17 +829,56 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
      vec_real& F, vec_real& IA2, vec_real& dUdt, vec_real& dVdt, vec_real& dFdt, real_t X)
 {
     vec_complex compVec1, compVec2;
+    vec_real Coeff1(Ntau), Coeff2(Ntau);
+    Delta = Y[2].real();
+    fft.doubleModes(Y, compVec1);
+    compVec1[2] = complex_t(-compVec1[compVec1.size()-2].real(), compVec1[2].imag());
+
+    fft.differentiate(compVec1, compVec2, Delta);
+    fft.backwardFFT(compVec1, compVec1);
+    fft.backwardFFT(compVec2, compVec2);    
+
+    #ifdef USE_HYBRID
+    #pragma omp parallel
+    {
+        #pragma omp for schedule(static)
+        for (size_t j=0; j<Ntau/2; ++j)
+        {
+            U[j] = 0.5 * (compVec1[j].real() - compVec1[j+Ntau/2].real());
+            V[j] = 0.5 * (compVec1[j].imag() - compVec1[j+Ntau/2].imag());
+            F[j] = 0.5 * (compVec1[j].imag() + compVec1[j+Ntau/2].imag());
+            dUdt[j] = 0.5 * (compVec2[j].real() - compVec2[j+Ntau/2].real());
+            dVdt[j] = 0.5 * (compVec2[j].imag() - compVec2[j+Ntau/2].imag());
+            dFdt[j] = 0.5 * (compVec2[j].imag() + compVec2[j+Ntau/2].imag());
+            U[j+Ntau/2] = - U[j];
+            V[j+Ntau/2] = - V[j];
+            F[j+Ntau/2] = F[j];
+            dUdt[j+Ntau/2] = - dUdt[j];
+            dVdt[j+Ntau/2] = - dVdt[j];
+            dFdt[j+Ntau/2] = dFdt[j];
+        }
+
+        #pragma omp for schedule(static)
+        for (size_t j=0; j<Ntau; ++j)
+        {
+            Coeff1[j] = - ((X+F[j]) * U[j]*U[j] + (X-F[j]) * V[j]*V[j])
+                        * std::pow((Dim - 2.0),3) / (8.0 * X) - (Dim - 3.0);
+            Coeff2[j] = Dim - 3.0; 
+        }
+    }
+    
+    
+    fft.solveInhom(Coeff1, Coeff2, IA2, Delta);
+    #else
+
     Delta = Y[2].real();
     fft.doubleModes(Y, compVec1);
     compVec1[2] = complex_t(-compVec1[compVec1.size()-2].real(), compVec1[2].imag());
 
     fft.differentiate(compVec1, compVec2, Delta);
 
-    fft.backwardFFT(compVec1, compVec1);    
+    fft.backwardFFT(compVec1, compVec1);
 
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau/2; ++j)
     {
         U[j] = 0.5 * (compVec1[j].real() - compVec1[j+Ntau/2].real());
@@ -666,9 +887,6 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
     }
 
     // Shifting symmetries
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau/2; ++j)
     {
         U[j+Ntau/2] = - U[j];
@@ -678,10 +896,6 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
 
     // Derivatives
     fft.backwardFFT(compVec2, compVec2);
-
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau/2; ++j)
     {
         dUdt[j] = 0.5 * (compVec2[j].real() - compVec2[j+Ntau/2].real());
@@ -690,9 +904,6 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
     }
 
     // Shifting symmetries
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau/2; ++j)
     {
         dUdt[j+Ntau/2] = - dUdt[j];
@@ -701,11 +912,6 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
     }
 
     //IA2 from constraint
-    vec_real Coeff1(Ntau), Coeff2(Ntau);
-
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau; ++j)
     {
         Coeff1[j] = - ((X+F[j]) * U[j]*U[j] + (X-F[j]) * V[j]*V[j])
@@ -714,6 +920,7 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
     }
     
     fft.solveInhom(Coeff1, Coeff2, IA2, Delta);
+    #endif
 
 }
 
@@ -728,8 +935,21 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
     fft.backwardFFT(compVec1, compVec1);
 
     #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
+    #pragma omp parallel
+    {
+        #pragma omp for schedule(static)
+        for (size_t j=0; j<Ntau/2; ++j)
+        {
+            U[j] = 0.5 * (compVec1[j].real() - compVec1[j+Ntau/2].real());
+            V[j] = 0.5 * (compVec1[j].imag() - compVec1[j+Ntau/2].imag());
+            F[j] = 0.5 * (compVec1[j].imag() + compVec1[j+Ntau/2].imag());
+            U[j+Ntau/2] = - U[j];
+            V[j+Ntau/2] = - V[j];
+            F[j+Ntau/2] = F[j];
+        }
+    }
+    #else
+
     for (size_t j=0; j<Ntau/2; ++j)
     {
         U[j] = 0.5 * (compVec1[j].real() - compVec1[j+Ntau/2].real());
@@ -738,14 +958,12 @@ void InitialConditionGenerator::StateVectorToFields(vec_complex& Y, vec_real& U,
     }
 
     // Shifting symmetries
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=0; j<Ntau/2; ++j)
     {
         U[j+Ntau/2] = - U[j];
         V[j+Ntau/2] = - V[j];
         F[j+Ntau/2] = F[j];
     }
+    #endif
 
 }

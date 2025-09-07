@@ -461,22 +461,35 @@ void NewtonSolver::generateGrid()
     real_t dZR = (ZRight - ZMid) / static_cast<real_t>(NRight);
 
     #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
+    #pragma omp parallel
+    {
+        #pragma omp for schedule(static)
+        for (size_t j=iL+1; j<iM; ++j)
+        {
+            real_t exponent = ZLeft + static_cast<real_t>(j-iL) * dZL;
+            XGrid[j] = std::exp(exponent) / (1.0 + std::exp(exponent));
+        }
+
+        #pragma omp for schedule(static)
+        for (size_t j=iM+1; j<iR; ++j)
+        {
+            real_t exponent = ZMid + static_cast<real_t>(j-iM) * dZR;
+            XGrid[j] = std::exp(exponent) / (1.0 + std::exp(exponent));
+        }
+    }
+    #else
     for (size_t j=iL+1; j<iM; ++j)
     {
         real_t exponent = ZLeft + static_cast<real_t>(j-iL) * dZL;
         XGrid[j] = std::exp(exponent) / (1.0 + std::exp(exponent));
     }
 
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (size_t j=iM+1; j<iR; ++j)
     {
         real_t exponent = ZMid + static_cast<real_t>(j-iM) * dZR;
         XGrid[j] = std::exp(exponent) / (1.0 + std::exp(exponent));
     }
+    #endif
 
 }
 

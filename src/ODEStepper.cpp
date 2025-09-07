@@ -74,9 +74,6 @@ void ODEStepper::computeDerivatives(vec_real& Yreal, vec_real& dYreal, real_t x)
 
     initGen.StateVectorToFields(Y, U, V, F, IA2, dUdt, dVdt, dFdt, x);
 
-    #ifdef USE_HYBRID
-    #pragma omp parallel for schedule(static)
-    #endif
     for (int j=0; j<Ntau; ++j)
     {
         dUdx[j] = (F[j] * ((Dim - 2.0) * V[j]
@@ -167,6 +164,7 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
     {
         ++itsReached;
         yK1 = yK2;
+        real_t norm2 = 0.0;
 
         // Calculation of derivatives
         for (int i=0; i<stage; ++i)
@@ -176,8 +174,34 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
 
         // Compute new stage
         #ifdef USE_HYBRID
-        #pragma omp parallel for collapse(2) schedule(static)
-        #endif
+        #pragma omp parallel
+        {
+            #pragma omp for collapse(2) schedule(static)
+            for (int i=0; i<stage; ++i)
+            {
+                for (int j=0; j<Ntau; ++j)
+                {
+                    real_t tmp = y[j];
+                    for (int k=0; k<stage; ++k)
+                    {
+                        tmp += dx * a[i][k] * f[k][j];
+                    }
+                    yK2[i][j] = tmp;
+                }
+            }
+
+            #pragma omp for collapse(2) reduction(+:norm2)
+            for (int i=0; i<stage; ++i)
+            {
+                for (int j=0; j<Ntau; ++j)
+                {
+                    norm2 += std::pow(yK1[i][j] - yK2[i][j], 2);
+                }
+            }
+        }
+        
+        #else
+
         for (int i=0; i<stage; ++i)
         {
             for (int j=0; j<Ntau; ++j)
@@ -191,10 +215,6 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
             }
         }
 
-        real_t norm2 = 0.0;
-        #ifdef USE_HYBRID
-        #pragma omp parallel for collapse(2) reduction(+:norm2)
-        #endif
         for (int i=0; i<stage; ++i)
         {
             for (int j=0; j<Ntau; ++j)
@@ -202,6 +222,8 @@ void ODEStepper::stepIRK(vec_complex& Yin, vec_complex& Yout,
                 norm2 += std::pow(yK1[i][j] - yK2[i][j], 2);
             }
         }
+
+        #endif
 
         norm2 = std::sqrt(norm2 / (Ntau*stage));
 
