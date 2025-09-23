@@ -1,125 +1,86 @@
-# Critical Collapse Simulation
+# Critical Gravitational Collapse Simulator
 
-This project implements a modern C++ rewrite of a classical Fortran77 code to simulate the critical gravitational collapse of a scalar field in spherical symmetry using spectral methods and implicit Runge-Kutta time integration.
-
----
-
-## 🚀 Features
-
-- Spectral Fourier-based solver with anti-aliasing  
-- High-order Taylor expansions for initial data  
-- Fully implicit and adaptive Runge-Kutta integrators (IRK2, RKF45)  
-- Full Newton-Raphson solver with automatic Jacobian assembly  
-- FFTW3 and LAPACKE backend support  
-- Configurable via clean JSON input  
-- All results stored in a unified `results.json` file  
+This project provides a modern C++ implementation of the critical gravitational collapse of a massless scalar field in spherical symmetry. It focuses on constructing discretely self-similar solutions in rational spacetime dimensions between 3 and 5. The framework builds upon spectral methods in logarithmic time and finite-difference integration in space, combined with a Newton–shooting method to solve the resulting non-linear boundary value problem. It supports serial as well as parallel execution using OpenMP, MPI, or a hybrid of both, enabling efficient large-scale simulations on HPC systems.
 
 ---
 
-## 📦 Build Instructions
+## Building
 
-### Requirements
+The code supports four different build modes, configured via CMake options:
 
-- C++17 compiler (e.g. `g++`, `clang++`)  
-- `cmake ≥ 3.16`  
-- `FFTW3`, `LAPACKE`, and `OpenMP` installed (e.g., via your package manager)
+- **Serial (`cc_serial`)** – pure sequential run (always available).
+- **OpenMP (`cc_openmp`)** – shared-memory parallelism on multicore CPUs.
+- **MPI (`cc_mpi`)** – distributed-memory parallelism across nodes.
+- **Hybrid (`cc_hybrid`)** – combined MPI + OpenMP execution.
 
-### Building
+### Dependencies
+
+The project relies on the following libraries:
+
+- **[CMake](https://www.cmake.org/) (≥ 3.20)** – build system
+- **[FFTW3](http://www.fftw.org/)** – spectral Fourier transforms
+- **[LAPACK](https://www.netlib.org/lapack/)** – linear algebra routines
+- **[nlohmann/json](https://github.com/nlohmann/json)** – JSON for Modern C++
+- **[OpenMP](https://www.openmp.org/)** (optional) – shared-memory parallelism
+- **[MPI](https://www.mpi-forum.org/)** (optional) – distributed-memory parallelism
+
+### Installation on Ubuntu
+
+Update your package list and install the required development packages:
 
 ```bash
-mkdir -p build && cd build
-cmake ..
+sudo apt update
+sudo apt install -y build-essential cmake pkg-config \
+    libfftw3-dev liblapacke-dev \
+    libopenmpi-dev openmpi-bin \
+    libomp-dev
+```
+
+For the JSON library, you can either install via package manager:
+
+```bash
+sudo apt install nlohmann-json3-dev
+```
+
+or fetch it with CMake’s `FetchContent` if you prefer a header-only inclusion.
+
+Build example:
+
+```bash
+cmake -DENABLE_OPENMP=ON -DENABLE_MPI=ON -DENABLE_HYBRID=ON -DENABLE_SERIAL=ON ..
 make -j
 ```
 
-The executable will be placed in `./build/bin/critical_collapse`.
+Executables are placed in the build directory, e.g. `cc_serial`, `cc_openmp`, `cc_mpi`, `cc_hybrid`.
 
 ---
 
-## ⚙️ Running the Simulation
+## Command Line Parameters
 
-Prepare your simulation parameters in:
+Each executable accepts the following arguments:
 
-```
-data/simulation.json
-```
+- `-s, --single-run`  
+  Run a single simulation (default).
 
-### Example
+- `-m, --multiple-run`  
+  Run multiple simulations from a JSON input dictionary.
 
-```json
-{
-  "Ny": 256,
-  "Dim": 4.0,
-  "XLeft": 0.001,
-  "XMid": 0.1,
-  "XRight": 0.999,
-  "EpsNewton": 1e-8,
-  "PrecisionNewton": 1e-14,
-  "Verbose": true,
-  "SlowError": 1e-3,
-  "OutEvery": 0,
-  "UseLogGrid": false,
-  "NLeft": 3000,
-  "NRight": 3000,
-  "Tolerance": 1e-15,
-  "TimeStep": 2,
-  "PrecisionIRK": 1e-15
-}
-```
+- `--ignore-converged`  
+  In multiple-run mode, skip already converged simulations.
 
-### Run
+- `-i, --input-path <path>`  
+  Path to a simulation input JSON file.  
+  Default: `data/simulation_4D_512.json`
 
-```bash
-./bin/critical_collapse
-```
+- `-r, --reversed-order`  
+  Reverse the execution order of simulation dimensions.
 
-Results will be appended to:
+- `-b, --benchmark`  
+  Enable benchmark mode (repeated runs of the same simulation).
 
-```
-data/results.json
-```
-
-with keys like `"4.0"`, `"3.9"` identifying the dimension used.
+- `--benchmark-repetitions <N>`  
+  Set number of repetitions in benchmark mode. Default: `3`.
 
 ---
 
-## 🧪 Tests (WIP)
 
-A `test/` folder is provided for future automated validation using Catch2 or GoogleTest.
-
----
-
-## 📁 Project Structure
-
-```
-.
-├── include/        # Headers
-├── src/            # Source files
-├── data/           # Input/output files
-├── build/          # Build directory
-├── test/           # Unit tests (optional)
-├── CMakeLists.txt
-├── simulation.json # Sample input
-└── results.json    # Collected simulation output
-```
-
----
-
-## 📜 License
-
-This project is released under the MIT License.
-
----
-
-## ✏️ Contributors
-
-- Lead Developer: Tobias Jechtl
-- Project Supervisers: Florian Ecker, Daniel Grumiller
-- Based on theoretical work of Choptuik, Garfinkle, and collaborators.
-
----
-
-## 🧠 References
-
-- M. W. Choptuik, “Universality and Scaling in Gravitational Collapse of a Massless Scalar Field,” *Phys. Rev. Lett.* **70**, 9 (1993).  
-- C. Gundlach, “Critical phenomena in gravitational collapse,” *Living Reviews in Relativity* **2**, 4 (1999).

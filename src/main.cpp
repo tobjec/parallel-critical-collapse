@@ -8,8 +8,8 @@ int main(int argc, char* argv[])
     bool ignoreConverged = false;
     bool reversed = false;
     bool benchmark = false;
-    int benchmark_repetitions = 1;
-    std::string inputPath{"data/simulation_4D.json"};
+    int benchmark_repetitions = 3;
+    std::string inputPath{"data/simulation_4D_512.json"};
 
     if (argc>1)
     {
