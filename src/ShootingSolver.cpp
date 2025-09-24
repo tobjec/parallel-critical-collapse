@@ -17,24 +17,9 @@
 //------------------------------------------------------------------------------
 // Ctor: initialize IRK stepper (Gauss–Legendre s=2) with shared initGen.
 //------------------------------------------------------------------------------
-ShootingSolver::ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, InitialConditionGenerator& initGen_, int maxIts_, int SchemeIRK)
+ShootingSolver::ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, InitialConditionGenerator& initGen_, int maxIts_, Scheme SchemeIRK)
     : Ntau(Ntau_), Dim(Dim_), Precision(precision_), initGen(initGen_), maxIts(maxIts_)
 {
-    switch (SchemeIRK)
-    {
-        case 1:
-            SchemeIRK = Scheme::IRK1;
-            break;
-        case 2:
-            SchemeIRK = Scheme::IRK2;
-            break;
-        case 3:
-            SchemeIRK = Scheme::IRK3;
-            break;
-        default:
-            throw std::invalid_argument("No known IRK Scheme supplied!");
-    }
-
     // Use IRK2 (order 4) as a good balance of stability/accuracy for stiff RHS
     stepper = std::make_unique<ODEStepper>(Ntau_, Dim_, precision_, SchemeIRK, initGen);
 }

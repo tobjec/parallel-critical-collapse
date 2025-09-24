@@ -91,7 +91,7 @@ class ShootingSolver
      * @throws std::invalid_argument if supplied integer is not linked to IRK Scheme.
      */
     ShootingSolver(int Ntau_, real_t Dim_, real_t precision_,
-                   InitialConditionGenerator& initGen_, int maxIts_ , int SchemeIRK_=2);
+                   InitialConditionGenerator& initGen_, int maxIts_ , Scheme SchemeIRK_=Scheme::IRK2);
 
     /**
      * @brief Perform bidirectional shooting and compute mismatch at Xmid.

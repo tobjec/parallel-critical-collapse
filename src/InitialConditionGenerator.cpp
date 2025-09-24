@@ -420,23 +420,21 @@ void InitialConditionGenerator::computeRightExpansion(
 
             // Prepare coefficients for v3 solve (depends on f1,f2,f3, ia2k, u0..u3, v0..v2)
             coeff1[j] = 2.0 + d/2.0 - 3.0*f1[j] + (3.0 - d) / ia20[j];
-            coeff2[j] = /* long expression preserved to match original */;
-            coeff2[j] =
-                ((d - 3.0) * std::pow(ia21[j], 3) * v0[j]) / std::pow(ia20[j], 4)
-              - ((d - 3.0) * ia21[j] * (2.0 * ia22[j] * v0[j] + ia21[j] * ((-1.0 + f1[j]) * v0[j] + v1[j]))) / std::pow(ia20[j], 3)
-              - ((d - 3.0) * ((-1.0 + f1[j] - f2[j] + f3[j]) * v0[j] + (1.0 - f1[j] + f2[j]) * v1[j] + (-1.0 + f1[j]) * v2[j])) / ia20[j]
-              + ((d - 2.0) * (-1.0 + f1[j] - f2[j] + f3[j]) * u0[j]
-                 - (d - 2.0) * (-1.0 + f1[j] - f2[j]) * u1[j]
-                 + 2.0 * u2[j] - d * u2[j] - 2.0 * f1[j] * u2[j] + d * f1[j] * u2[j]
-                 - 2.0 * u3[j] + d * u3[j]
-                 + 2.0 * v0[j] - d * v0[j] - 2.0 * f1[j] * v0[j] + d * f1[j] * v0[j]
-                 + 2.0 * f2[j] * v0[j] - d * f2[j] * v0[j] - 2.0 * f3[j] * v0[j] + d * f3[j] * v0[j]
-                 - 2.0 * v1[j] + d * v1[j] + 2.0 * f1[j] * v1[j] - d * f1[j] * v1[j]
-                 - 2.0 * f2[j] * v1[j] + d * f2[j] * v1[j] - 2.0 * f3[j] * v1[j]
-                 + ((d - 2.0) * (-1.0 + f1[j]) - 4.0 * f2[j]) * v2[j]) / 2.0
-              + ((d - 3.0) * (ia23[j] * v0[j]
-                 + ia22[j] * ((-1.0 + f1[j]) * v0[j] + v1[j])
-                 + ia21[j] * ((1.0 - f1[j] + f2[j]) * v0[j] + (-1.0 + f1[j]) * v1[j] + v2[j]))) / std::pow(ia20[j], 2);
+            coeff2[j] = ((d - 3.0) * std::pow(ia21[j], 3) * v0[j]) / std::pow(ia20[j], 4)
+                        - ((d - 3.0) * ia21[j] * (2.0 * ia22[j] * v0[j] + ia21[j] * ((-1.0 + f1[j]) * v0[j] + v1[j]))) / std::pow(ia20[j], 3)
+                        - ((d - 3.0) * ((-1.0 + f1[j] - f2[j] + f3[j]) * v0[j] + (1.0 - f1[j] + f2[j]) * v1[j] + (-1.0 + f1[j]) * v2[j])) / ia20[j]
+                        + ((d - 2.0) * (-1.0 + f1[j] - f2[j] + f3[j]) * u0[j]
+                            - (d - 2.0) * (-1.0 + f1[j] - f2[j]) * u1[j]
+                            + 2.0 * u2[j] - d * u2[j] - 2.0 * f1[j] * u2[j] + d * f1[j] * u2[j]
+                            - 2.0 * u3[j] + d * u3[j]
+                            + 2.0 * v0[j] - d * v0[j] - 2.0 * f1[j] * v0[j] + d * f1[j] * v0[j]
+                            + 2.0 * f2[j] * v0[j] - d * f2[j] * v0[j] - 2.0 * f3[j] * v0[j] + d * f3[j] * v0[j]
+                            - 2.0 * v1[j] + d * v1[j] + 2.0 * f1[j] * v1[j] - d * f1[j] * v1[j]
+                            - 2.0 * f2[j] * v1[j] + d * f2[j] * v1[j] - 2.0 * f3[j] * v1[j]
+                            + ((d - 2.0) * (-1.0 + f1[j]) - 4.0 * f2[j]) * v2[j]) / 2.0
+                        + ((d - 3.0) * (ia23[j] * v0[j]
+                            + ia22[j] * ((-1.0 + f1[j]) * v0[j] + v1[j])
+                            + ia21[j] * ((1.0 - f1[j] + f2[j]) * v0[j] + (-1.0 + f1[j]) * v1[j] + v2[j]))) / std::pow(ia20[j], 2);
         }
 
         #pragma omp single

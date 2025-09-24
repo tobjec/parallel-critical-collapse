@@ -43,7 +43,8 @@ struct SimulationConfig
     bool   Verbose, Debug, Converged;
     size_t NLeft, NRight;
     real_t PrecisionIRK;
-    int    SchemeIRK, MaxIterIRK;
+    Scheme SchemeIRK;
+    int    MaxIterIRK;
     real_t Delta;
     vec_real fc, psic, Up;
 
@@ -84,9 +85,16 @@ struct SimulationConfig
         Converged = simConfigIn["Converged"];
         NLeft = simConfigIn["NLeft"];
         NRight = simConfigIn["NRight"];
-        SchemeIRK = simConfigIn["SchemeIRK"];
         PrecisionIRK = simConfigIn["PrecisionIRK"];
         MaxIterIRK = simConfigIn["MaxIterIRK"];
+
+        switch (simConfigIn["SchemeIRK"].get<int>())
+        {
+            case 1: SchemeIRK = Scheme::IRK1; break;
+            case 2: SchemeIRK = Scheme::IRK2; break;
+            case 3: SchemeIRK = Scheme::IRK3; break;
+            default: throw std::invalid_argument("Wrong IRK Scheme stage supplied!");
+        }
 
         if (!simConfigIn["Initial_Conditions"]["Delta"].is_null())
         {
@@ -155,7 +163,7 @@ struct SimulationConfig
         std::cout << "Converged: " << Converged << std::endl;
         std::cout << "NLeft: " << NLeft << std::endl;
         std::cout << "NRight: " << NRight << std::endl;
-        std::cout << "SchemeIRK: " << SchemeIRK << std::endl;
+        std::cout << "SchemeIRK: " << int(SchemeIRK)+1 << std::endl;
         std::cout << "PrecisionIRK: " << PrecisionIRK << std::endl;
         std::cout << "MaxIterIRK: " << MaxIterIRK << std::endl;
         std::cout << "Delta: " << Delta << std::endl;
