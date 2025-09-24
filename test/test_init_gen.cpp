@@ -1,16 +1,31 @@
+//==============================================================================
+// test_initial_condition_generator.cpp
+// Integration test for InitialConditionGenerator + SpectralTransformer:
+//   1) Packs (U^+, ψ_c, f_c) spectral fields to Newton vector and unpacks back;
+//      compares against high-precision reference signals.
+//   2) Builds left/right initial state vectors via Taylor expansions at XLeft/XRight
+//      and matches them against known reference spectra (Yleft_ref/Yright_ref).
+// Uses `almost_equal` from common.hpp and plain `assert` for validation.
+//==============================================================================
+
 #include "InitialConditionGenerator.hpp"
 #include "SpectralTransformer.hpp"
 #include "common.hpp"
 
 int main()
 {
+    // Problem/solver sizes and physical parameters for the reference snapshot.
     constexpr int Ntau = 128;
     constexpr int Nnewton = 3*Ntau/4;
     constexpr real_t Dim = 4.0;
     constexpr real_t Delta = 3.445501184653556;
-    real_t XLeft = 0.001;
-    real_t XRight = 0.999;
+    real_t XLeft = 0.001;   // small-x left expansion point
+    real_t XRight = 0.999;  // near the right boundary
 
+    // -------------------------------------------------------------------------
+    // Reference center field f_c(τ) (periodic, τ-grid of size Ntau).
+    // Data are duplicated for the second half (even symmetry), as used by code.
+    // -------------------------------------------------------------------------
     vec_real fc = {
       0.1808380386902108, 0.1879817629154226, 0.195750311784528,
       0.2040754293224346, 0.212735080335177, 0.2218194463190475,
@@ -58,6 +73,7 @@ int main()
       0.1740665281993895
     };
 
+    // ψ_c(τ) reference (odd symmetry encoded via sign flip in second half).
     vec_real psic = {
       10.26222609354186, 11.1343057747072, 11.57649284260152, 11.26753794347619,
       11.44286686599821, 12.60484410221684, 13.41474468039184, 13.20230950837687,
@@ -93,6 +109,7 @@ int main()
       9.260985966392893, 9.998575345435324, 10.30492346474401, 10.05774112945161
     };
 
+    // U^+(τ) reference; periodic with odd symmetry across Ntau/2.
     vec_real Up = {
       0.5709939055733149, 0.5737538511432649, 0.5757121689263367,
       0.5769323088794193, 0.577464411725264, 0.5773437223567705,
@@ -139,6 +156,9 @@ int main()
       0.5627643760828809, 0.5673581786157592
     };
 
+    // -------------------------------------------------------------------------
+    // “Unpacked” reference fields (expected outputs after pack→unpack roundtrip)
+    // -------------------------------------------------------------------------
     vec_real Up_unpack_ref = {
         0.5709939055733146, 0.573753851143265, 0.5757121689263367,
         0.5769323088794192, 0.5774644117252639, 0.5773437223567705,
@@ -277,6 +297,9 @@ int main()
         0.1675191507654919, 0.1740665281993897
     };
 
+    // -------------------------------------------------------------------------
+    // Instantiate generator and perform pack→unpack round-trip checks.
+    // -------------------------------------------------------------------------
     InitialConditionGenerator icg(Ntau, Dim, Delta);
 
     vec_real packed(Nnewton), Up_unpack(Ntau), psic_unpack(Ntau), fc_unpack(Ntau);
@@ -291,7 +314,10 @@ int main()
         assert(almost_equal(fc_unpack[i], fc_unpack_ref[i]));
     }
 
-    // Compute expansions
+    // -------------------------------------------------------------------------
+    // Left/right Taylor expansions at XLeft/XRight and reference comparison.
+    // Y stores the spectral state vector after expansion; we compare entrywise.
+    // -------------------------------------------------------------------------
     vec_complex Yleft(Ntau), Yright(Ntau);
 
     vec_complex Yleft_ref = {
@@ -344,6 +370,7 @@ int main()
         {0.1548850030286238, -0.01278402094355271}   
     };
 
+    // Generate expansions from the unpacked fields and validate against refs.
     icg.computeLeftExpansion(XLeft, fc_unpack, psic_unpack, Yleft, Delta, false);
     icg.computeRightExpansion(XRight, Up_unpack, Yright, Delta, false);
 

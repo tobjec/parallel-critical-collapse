@@ -11,6 +11,7 @@
     "SlowError": 0.001,
     "NLeft": 4000,
     "NRight": 4000,
+    "SchemeIRK": 2,
     "PrecisionIRK": 1e-15,
     "MaxIterIRK": 100,
     "Converged": false,
