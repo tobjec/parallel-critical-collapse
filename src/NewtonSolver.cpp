@@ -769,7 +769,7 @@ void NewtonSolver::writeFinalOutput(size_t newtonIts, real_t mismatchNorm)
     resultDict["Converged"] = true;
     resultDict["NLeft"] = NLeft;
     resultDict["NRight"] = NRight;
-    resultDict["SchemeIRK"] = config.SchemeIRK;
+    resultDict["SchemeIRK"] = int(config.SchemeIRK)+1;
     resultDict["PrecisionIRK"] = config.PrecisionIRK;
     resultDict["MaxIterIRK"] = config.MaxIterIRK;
     resultDict["IterNewton"] = newtonIts;
