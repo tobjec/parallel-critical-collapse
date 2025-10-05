@@ -783,7 +783,9 @@ void NewtonSolver::writeFinalOutput(size_t newtonIts, real_t mismatchNorm)
 
     #if defined(USE_MPI) || defined(USE_HYBRID)
     if (rank==0)
+    {
         std::cout << "Final result stored in simulation dictionary for dimension D = " << Dim << "." << std::endl << std::endl;
+    }
     #else
     std::cout << "Final result stored in simulation dictionary for dimension D = " << Dim << "." << std::endl << std::endl;
     #endif
