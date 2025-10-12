@@ -79,6 +79,7 @@ json NewtonSolver::run(json* benchmark_result)
         real_t err = 1.0;       // current residual norm
         real_t fac = 1.0;       // damping factor
         real_t errOld = 1.0;    // previous residual norm
+        int mismatch_increase_count {}; // number of increased mismatch
 
         // Pack (Up, psic, fc, Δ) → in0 and build spatial grid
         initGen.packSpectralFields(Up, psic, fc, in0);
@@ -151,8 +152,10 @@ json NewtonSolver::run(json* benchmark_result)
                 MPI_Bcast(out0.data(), 1, mpi_contiguous_t, 0, MPI_COMM_WORLD);
             }
 
-            // Monotonicity safeguard: if residual worsens for ≥1 step, backtrack
-            if (its >= 2 && std::log10(err) > std::log10(errOld))
+            // Monotonicity safeguard: if residual worsens for ≥5 step, backtrack
+            if (std::log10(err) > std::log10(errOld)) mismatch_increase_count++; 
+
+            if (mismatch_increase_count >= 5)
             {
                 Converged = true;
                 MPI_Bcast(in0old.data(), 1, mpi_contiguous_t, 0, MPI_COMM_WORLD);
@@ -161,7 +164,9 @@ json NewtonSolver::run(json* benchmark_result)
                 initGen.unpackSpectralFields(in0old, Up, psic, fc);
                 writeFinalOutput(its, errOld);
                 if (rank==0)
+                {
                     std::cerr << "Mismatch increased – terminating Newton iteration." << std::endl;
+                }
                 break;                    
             }
 
@@ -193,7 +198,12 @@ json NewtonSolver::run(json* benchmark_result)
                 // Line damping based on target “slowErr”
                 fac = std::min(1.0, slowErr / err);
 
-                in0old = in0;                 // store trial point
+                if (std::log10(err) < std::log10(errOld))
+                {
+                    in0old = in0;                 // store trial point
+                    mismatch_increase_count = 0;
+                }
+                
                 for (size_t i=0; i<Nnewton; ++i)
                 {
                     in0[i] += fac * dx[i];
@@ -258,6 +268,7 @@ json NewtonSolver::run(json* benchmark_result)
     if (!Converged)
     {
         real_t fac = 1.0, err = 1.0, errOld = 1.0;
+        int mismatch_increase_count {};
 
         initGen.packSpectralFields(Up, psic, fc, in0);
         in0[2*Nnewton/3+2] = Delta;
@@ -299,7 +310,9 @@ json NewtonSolver::run(json* benchmark_result)
             }
 
             // Safeguard against divergence
-            if (its >= 2 && std::log10(err) > std::log10(errOld))
+            if (std::log10(err) > std::log10(errOld)) mismatch_increase_count++; 
+
+            if (mismatch_increase_count >= 5)
             {
                 Converged = true;
                 Delta = in0old[2*Nnewton/3+2];
@@ -335,7 +348,13 @@ json NewtonSolver::run(json* benchmark_result)
             solveLinearSystem(J, rhs, dx);
 
             fac = std::min(1.0, slowErr / err);
-            in0old = in0;
+
+            if (std::log10(err) < std::log10(errOld))
+            {
+                in0old = in0;                 // store trial point
+                mismatch_increase_count = 0;
+            }
+            
             for (size_t i=0; i<Nnewton; ++i) in0[i] += fac * dx[i];
 
             if (benchmark)
