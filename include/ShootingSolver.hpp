@@ -18,6 +18,7 @@
  */
 
 #include "common.hpp"
+#include "SimulationConfig.hpp"
 #include "SpectralTransformer.hpp"
 #include "InitialConditionGenerator.hpp"
 #include "ODEStepper.hpp"
@@ -62,7 +63,7 @@ class ShootingSolver
     void integrateToMatchPoint(
         const vec_complex& yInit, const vec_real& xGrid,
         size_t startIdx, size_t endIdx, bool forward,
-        vec_complex& yFinal, bool Debug=false, json* fieldVals=nullptr);
+        vec_complex& yFinal, SimulationConfig* config=nullptr, json* fieldVals=nullptr);
 
     /**
      * @brief Compute mismatch vector between left- and right-integrated states.
@@ -102,7 +103,7 @@ class ShootingSolver
      * @param iRight          Index of right boundary.
      * @param iMid            Index of match point.
      * @param[out] mismatchOut Output mismatch vector at Xmid.
-     * @param Debug           If true, enable verbose diagnostics.
+     * @param config          If given, enable verbose diagnostics.
      * @param fieldVals       Optional JSON to collect full field values.
      *
      * @details
@@ -112,6 +113,6 @@ class ShootingSolver
      */
     void shoot(vec_complex& YLeft, vec_complex& YRight, const vec_real& gridX,
                size_t iLeft, size_t iRight, size_t iMid,
-               vec_complex& mismatchOut, bool Debug=false,
+               vec_complex& mismatchOut, SimulationConfig* config=nullptr,
                json* fieldVals=nullptr);
 };

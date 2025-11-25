@@ -192,3 +192,24 @@ vec_real fit_quadratic_least_squares(const vec_real& x_vals, const vec_real& y_v
 
     return {b[0], b[1], b[2]};
 }
+
+//------------------------------------------------------------------------------
+// Extracts elements at indices i where (i % n == 0) or (i == last_index).
+// Ensures both the first and last elements are always included (closed interval).
+// Returns the subset vector. Input 'a' remains unmodified.
+//------------------------------------------------------------------------------
+vec_real every_nth_element(const vec_real& a, size_t n)
+{
+    size_t i = 0;
+    size_t last_idx = a.size()-1;
+    vec_real tmp_vec;
+    std::for_each(a.begin(), a.end(), [&i,&tmp_vec,n,last_idx](auto& ele) { 
+        if ((i%n==0) || (i==last_idx))
+        {
+            tmp_vec.push_back(ele);
+        }
+        ++i;
+    });
+    
+    return tmp_vec;
+}

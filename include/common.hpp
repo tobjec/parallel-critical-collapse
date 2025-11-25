@@ -155,3 +155,12 @@ vec_real build_design_matrix(real_t x1, real_t x2, real_t x3);
  * @throws std::invalid_argument if input sizes mismatch or insufficient points.
  */
 vec_real fit_quadratic_least_squares(const vec_real& x_vals, const vec_real& y_vals);
+
+/**
+ * @brief Extracts elements with stride n, ensuring the last element is always included.
+ *
+ * @param a Input vector to sample from.
+ * @param n The stride interval (every n-th element).
+ * @return A new vector containing the sampled elements, plus the final element of 'a'.
+ */
+vec_real every_nth_element(const vec_real& a, size_t n);

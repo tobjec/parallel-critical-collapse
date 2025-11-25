@@ -26,6 +26,7 @@
  * - `SlowError`   : Slowly-updated error metric (diagnostics).
  * - `MaxIterNewton` : Maximum Newton iterations.
  * - `Verbose/Debug/Converged` : Execution flags and previous status.
+ * - `DebugNx/DebugNtau` : Save every nth spatial and time point.
  * - `NLeft/NRight`: Spatial grid resolution left/right of the match.
  * - `SchemeIRK`: Scheme (order) for implicit RK method (e.g. 1(1),2(4),3(6)).
  * - `PrecisionIRK`: Tolerance for implicit RK step solves.
@@ -41,7 +42,7 @@ struct SimulationConfig
     real_t EpsNewton, PrecisionNewton, SlowError;
     int    MaxIterNewton;
     bool   Verbose, Debug, Converged;
-    size_t NLeft, NRight;
+    size_t NLeft, NRight, DebugNx, DebugNtau;
     real_t PrecisionIRK;
     Scheme SchemeIRK;
     int    MaxIterIRK;
@@ -57,8 +58,8 @@ struct SimulationConfig
      *   "Ntau": ..., "Dim": ...,
      *   "XLeft": ..., "XMid": ..., "XRight": ...,
      *   "EpsNewton": ..., "PrecisionNewton": ..., "SlowError": ...,
-     *   "MaxIterNewton": ..., "Verbose": ..., "Debug": ..., "Converged": ...,
-     *   "NLeft": ..., "NRight": ...,
+     *   "MaxIterNewton": ..., "Verbose": ..., "Debug": ..., "DebugNx": ..., "DebugNtau": ...,
+     *   "Converged": ..., "NLeft": ..., "NRight": ...,
      *   "PrecisionIRK": ..., "SchemeIRK": ..., "MaxIterIRK": ...,
      *   "Initial_Conditions": {
      *     "Delta": <float or null>,
@@ -94,6 +95,24 @@ struct SimulationConfig
             case 2: SchemeIRK = Scheme::IRK2; break;
             case 3: SchemeIRK = Scheme::IRK3; break;
             default: throw std::invalid_argument("Wrong IRK Scheme stage supplied!");
+        }
+
+        if (!simConfigIn["DebugNx"].is_null())
+        {
+            DebugNx = simConfigIn["DebugNx"].get<size_t>();
+        }
+        else
+        {
+            DebugNx = 100;
+        }
+
+        if (!simConfigIn["DebugNtau"].is_null())
+        {
+            DebugNtau = simConfigIn["DebugNtau"].get<size_t>();
+        }
+        else
+        {
+            DebugNtau = 1;
         }
 
         if (!simConfigIn["Initial_Conditions"]["Delta"].is_null())
@@ -160,6 +179,8 @@ struct SimulationConfig
         std::cout << "MaxIterNewton: " << MaxIterNewton << std::endl;
         std::cout << "Verbose: " << Verbose << std::endl;
         std::cout << "Debug: " << Debug << std::endl;
+        std::cout << "DebugNx: " << DebugNx << std::endl;
+        std::cout << "DebugNtau: " << DebugNtau << std::endl;
         std::cout << "Converged: " << Converged << std::endl;
         std::cout << "NLeft: " << NLeft << std::endl;
         std::cout << "NRight: " << NRight << std::endl;

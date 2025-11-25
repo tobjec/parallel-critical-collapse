@@ -28,15 +28,15 @@ ShootingSolver::ShootingSolver(int Ntau_, real_t Dim_, real_t precision_, Initia
 // shoot
 // Integrate left and right boundary states to the match point and form the
 // spectral mismatch that Newton will drive to zero.
-// If Debug=true and fieldVals!=nullptr, store snapshots every ~100 steps.
+// If config!=nullptr and fieldVals!=nullptr, store snapshots every ~nth steps.
 //------------------------------------------------------------------------------
 void ShootingSolver::shoot(vec_complex& YLeft, vec_complex& YRight, const vec_real& gridX,
-    size_t iLeft, size_t iRight, size_t iMid, vec_complex& mismatchOut, bool Debug, json* fieldVals)
+    size_t iLeft, size_t iRight, size_t iMid, vec_complex& mismatchOut, SimulationConfig* config, json* fieldVals)
 {
     // March left → mid (increasing x)
-    integrateToMatchPoint(YLeft,  gridX, iLeft,  iMid,  true,  YLeft,  Debug, fieldVals);
+    integrateToMatchPoint(YLeft,  gridX, iLeft,  iMid,  true,  YLeft,  config, fieldVals);
     // March right → mid (decreasing x)
-    integrateToMatchPoint(YRight, gridX, iRight, iMid,  false, YRight, Debug, fieldVals);
+    integrateToMatchPoint(YRight, gridX, iRight, iMid,  false, YRight, config, fieldVals);
 
     // Difference at the midpoint
     computeMismatch(YLeft, YRight, mismatchOut);
@@ -53,7 +53,7 @@ void ShootingSolver::shoot(vec_complex& YLeft, vec_complex& YRight, const vec_re
 void ShootingSolver::integrateToMatchPoint(
     const vec_complex& Yinit, const vec_real& xGrid,
     size_t startIdx, size_t endIdx, bool forward,
-    vec_complex& Yfinal, bool Debug, json* fieldVals)
+    vec_complex& Yfinal, SimulationConfig* config, json* fieldVals)
 {
     vec_complex Y1=Yinit, Y2=Yinit;      // rolling input/output per step
     vec_real A(Ntau), U(Ntau), V(Ntau), f(Ntau), dUdt(Ntau), dVdt(Ntau), dFdt(Ntau); 
@@ -81,8 +81,8 @@ void ShootingSolver::integrateToMatchPoint(
                 #endif
             }
 
-            // Optional diagnostics every ~100 steps and at the last point
-            if (Debug && (i%100==0 || i==endIdx-1) && fieldVals)
+            // Optional diagnostics every ~DebugNx steps and at the last point
+            if (config->Debug && (i%config->DebugNx==0 || i==endIdx-1) && fieldVals)
             {
                 // Convert current spectral state → fields at xGrid[i]
                 initGen.StateVectorToFields(Y1, U, V, f, A, dUdt, dVdt, dFdt, xGrid[i]); 
@@ -90,10 +90,10 @@ void ShootingSolver::integrateToMatchPoint(
                 // Store lapse-like A = 1/sqrt(IA2)
                 std::for_each(A.begin(), A.end(), [](auto& ele){ele=std::sqrt(1/ele);});
 
-                (*fieldVals)[std::to_string(xGrid[i])]["A"] = A;
-                (*fieldVals)[std::to_string(xGrid[i])]["U"] = U;
-                (*fieldVals)[std::to_string(xGrid[i])]["V"] = V;
-                (*fieldVals)[std::to_string(xGrid[i])]["f"] = f;
+                (*fieldVals)[std::to_string(xGrid[i])]["A"] = every_nth_element(A, config->DebugNtau);
+                (*fieldVals)[std::to_string(xGrid[i])]["U"] = every_nth_element(U, config->DebugNtau);
+                (*fieldVals)[std::to_string(xGrid[i])]["V"] = every_nth_element(V, config->DebugNtau);
+                (*fieldVals)[std::to_string(xGrid[i])]["f"] = every_nth_element(f, config->DebugNtau);
             }
 
             // Advance rolling state
@@ -124,17 +124,17 @@ void ShootingSolver::integrateToMatchPoint(
                 #endif
             }
 
-            // Optional diagnostics every ~100 steps and at the bounds
-            if (Debug && (i%100==0 || i==endIdx+1 || i==startIdx) && fieldVals)
+            // Optional diagnostics every ~DebugNx steps and at the bounds
+            if (config->Debug && (i%config->DebugNx==0 || i==endIdx+1 || i==startIdx) && fieldVals)
             {
                 initGen.StateVectorToFields(Y1, U, V, f, A, dUdt, dVdt, dFdt, xGrid[i]); 
                 
                 std::for_each(A.begin(), A.end(), [](auto& ele){ele=std::sqrt(1/ele);});
 
-                (*fieldVals)[std::to_string(xGrid[i])]["A"] = A;
-                (*fieldVals)[std::to_string(xGrid[i])]["U"] = U;
-                (*fieldVals)[std::to_string(xGrid[i])]["V"] = V;
-                (*fieldVals)[std::to_string(xGrid[i])]["f"] = f;
+                (*fieldVals)[std::to_string(xGrid[i])]["A"] = every_nth_element(A, config->DebugNtau);
+                (*fieldVals)[std::to_string(xGrid[i])]["U"] = every_nth_element(U, config->DebugNtau);
+                (*fieldVals)[std::to_string(xGrid[i])]["V"] = every_nth_element(V, config->DebugNtau);
+                (*fieldVals)[std::to_string(xGrid[i])]["f"] = every_nth_element(f, config->DebugNtau);
             }
 
             Y1 = Y2;

@@ -415,7 +415,7 @@ void NewtonSolver::shoot(vec_real& inputVec, vec_real& outputVec, json* fieldVal
     initializeInput(Verbose);
 
     // Two-sided shooting (left→mid and right→mid), get spectral mismatch
-    shooter->shoot(YLeft, YRight, XGrid, iL, iR, iM, mismatchOut, Debug, fieldVals);
+    shooter->shoot(YLeft, YRight, XGrid, iL, iR, iM, mismatchOut, &config, fieldVals);
 
     // Transform mismatch state to fields and re-pack as output
     initGen.StateVectorToFields(mismatchOut, U, V, F);
@@ -453,7 +453,7 @@ void NewtonSolver::shoot(vec_real& inputVec, vec_real& outputVec, ShootingSolver
     initializeInput(initGen_local, YLeft_local, YRight_local, Up_local, psic_local, fc_local, Delta_local, Verbose);
 
     // Local shoot and pack
-    shooter_local.shoot(YLeft_local, YRight_local, XGrid, iL, iR, iM, mismatchOut_local, false);
+    shooter_local.shoot(YLeft_local, YRight_local, XGrid, iL, iR, iM, mismatchOut_local);
     initGen_local.StateVectorToFields(mismatchOut_local, U, V, F);
     initGen_local.packSpectralFields(U, V, F, outputVec);
 }

@@ -131,6 +131,8 @@ class ResultPlotter:
                 self.plot_convergence(save_fpath, single_plots, spec)
             case "fields":
                 self.plot_fields(save_fpath, single_plots)
+            case "fields_paper":
+                self.plot_fields_paper(save_fpath, single_plots)
             case "mismatch_layer_finder":
                 self.plot_mismatch_pos_finder(save_fpath, spec)
             case "initial_data":
@@ -1196,6 +1198,233 @@ class ResultPlotter:
                     plt.savefig((save_fpath.parent / save_name).as_posix())
 
                 plt.show()
+    
+    def plot_fields_paper(self, save_fpath: Path, single_plots: bool) -> None:
+
+        result_dict = {}
+
+        for file in self.input_files:
+            _, dim, step = file.name.rsplit(".", maxsplit=1)[0].split("_")
+            with open(file.as_posix(), "r") as f:
+                result_dict[step] = json.load(f)
+
+            result_dict[step]["x"] = np.array(
+                sorted(list(result_dict[step].keys()))[:-1]
+            )
+            result_dict[step]["tau"] = np.linspace(
+                0,
+                result_dict[step]["Delta"],
+                num=len(result_dict[step][str(result_dict[step]["x"][0])]["A"]),
+            )
+
+            As, Us, Vs, fs = [], [], [], []
+            for x in result_dict[step]["x"]:
+                x_str = str(x)
+                As.append(result_dict[step][x_str]["A"])
+                Us.append(result_dict[step][x_str]["U"])
+                Vs.append(result_dict[step][x_str]["V"])
+                fs.append(result_dict[step][x_str]["f"])
+                del result_dict[step][x_str]
+
+            result_dict[step]["a"] = np.array(As).T
+            result_dict[step]["f"] = np.array(fs).T
+            result_dict[step]["U"] = np.array(Us).T
+            result_dict[step]["V"] = np.array(Vs).T
+
+            result_dict[step]["x"], result_dict[step]["tau"] = np.meshgrid(
+                np.array(result_dict[step]["x"], dtype=np.float64),
+                result_dict[step]["tau"],
+            )
+
+            ia2 = 1 / result_dict[step]["a"]**(2)
+            U = result_dict[step]["U"]
+            V = result_dict[step]["V"]
+            x = result_dict[step]["x"]
+            t = result_dict[step]["tau"]
+            delta = result_dict[step]["Delta"]
+
+            result_dict[step]["omega"] = -np.log(ia2)
+            result_dict[step]["pi"] = (V+U) / (2*x) * np.sqrt((float(dim) - 2)**3 / 4)
+            result_dict[step]["psi"] = (V-U) / (2*x**2) * np.sqrt((float(dim) - 2)**3 / 4)
+
+            if single_plots:
+
+                fields = ["omega", "f", "pi", "psi"]
+                cmaps = [mpl.cm.Blues, mpl.cm.Greens, mpl.cm.Reds, mpl.cm.Purples]
+                axtitles = [
+                    r"$\omega(x,\tau)$",
+                    r"$f(x,\tau)$",
+                    r"$\pi(x,\tau)$",
+                    r"$\psi(x,\tau)$",
+                ]
+
+                for field, cmap, axtitle in zip(fields, cmaps, axtitles):
+
+                    fig, ax = plt.subplots(
+                        nrows=1,
+                        ncols=1,
+                        figsize=(12, 10),
+                        subplot_kw={"projection": "3d"},
+                    )
+
+                    data = result_dict[step][field]
+
+                    xmin, xmax = round_limits(x.min(), x.max())
+                    ymin, ymax = round_limits(t.min(), t.max())
+                    zmin, zmax = round_limits(data.min(), data.max())
+
+                    if field == "a":
+                        zmax = 1.5
+
+                    ls = LightSource(azdeg=315, altdeg=45)
+                    rgb = ls.shade(data, cmap=cmap, vert_exag=0.1, blend_mode="soft")
+
+                    ax.plot_surface(
+                        x,
+                        t/delta,
+                        data,
+                        facecolors=rgb,
+                        rstride=1,
+                        cstride=1,
+                        linewidth=0,
+                        antialiased=True,
+                        rasterized=True,
+                    )
+
+                    ax.zaxis.set_rotate_label(False)
+                    ax.set_xlabel(r"$x$", fontsize=28, labelpad=20)
+                    ax.set_ylabel(r"$\tau / \Delta$", fontsize=28, labelpad=20)
+                    ax.set_zlabel(f"{axtitle}", fontsize=28, labelpad=20, rotation=90)
+
+                    ax.tick_params(axis="x", pad=10, labelsize=22)
+                    ax.tick_params(axis="y", pad=10, labelsize=22)
+                    ax.tick_params(axis="z", pad=10, labelsize=22, width=1.5, length=6)
+
+                    ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.25))
+                    ax.yaxis.set_major_locator(mpl.ticker.MultipleLocator(0.5))
+                    ax.zaxis.set_major_locator(mpl.ticker.MaxNLocator(5))
+
+                    xticks = ax.get_xticks()
+                    xtick_labels = [
+                        f"{tick:.1f}" if tick == 0 else str(tick) for tick in xticks
+                    ]
+                    ax.set_xticks(xticks)
+                    ax.set_xticklabels(xtick_labels)
+                    ax.set_yticks(xticks)
+                    ax.set_yticklabels(xtick_labels)
+
+                    ax.set_xlim(0, 1)
+                    ax.set_ylim(0, 1)
+                    ax.set_zlim(zmin, zmax)
+
+                    ax.view_init(elev=25, azim=-140)
+                    ax.xaxis.pane.fill = False
+                    ax.yaxis.pane.fill = False
+                    ax.zaxis.pane.fill = False
+
+                    plt.subplots_adjust(
+                        left=0, right=1, top=1, bottom=0, wspace=0, hspace=0
+                    )
+                    if save_fpath:
+                        save_name = Path(
+                            save_fpath.name.split(".")[0]
+                            + f"_{field}_field_{float(dim):.3f}_{step}_paper"
+                            + "."
+                            + save_fpath.name.split(".")[-1]
+                        )
+                        plt.savefig(
+                            (save_fpath.parent / save_name).as_posix(),
+                            bbox_inches="tight",
+                        )
+                    plt.show()
+
+            else:
+
+                fig, axes = plt.subplots(
+                    nrows=2, ncols=2, figsize=(30, 25), subplot_kw={"projection": "3d"}
+                )
+
+                fields = ["omega", "f", "pi", "psi"]
+                cmaps = [mpl.cm.Blues, mpl.cm.Greens, mpl.cm.Reds, mpl.cm.Purples]
+                axtitles = [
+                    r"$\omega(x,\tau)$",
+                    r"$f(x,\tau)$",
+                    r"$\pi(x,\tau)$",
+                    r"$\psi(x,\tau)$",
+                ]
+
+                for ax, field, cmap, axtitle in zip(
+                    axes.flatten(), fields, cmaps, axtitles
+                ):
+
+                    x = result_dict[step]["x"]
+                    t = result_dict[step]["tau"]
+                    data = result_dict[step][field]
+
+                    xmin, xmax = round_limits(x.min(), x.max())
+                    ymin, ymax = round_limits(t.min(), t.max())
+                    zmin, zmax = round_limits(data.min(), data.max())
+
+                    ls = LightSource(azdeg=315, altdeg=45)
+                    rgb = ls.shade(data, cmap=cmap, vert_exag=0.1, blend_mode="soft")
+
+                    ax.plot_surface(
+                        x,
+                        t/delta,
+                        data,
+                        facecolors=rgb,
+                        rstride=1,
+                        cstride=1,
+                        linewidth=0,
+                        antialiased=True,
+                        rasterized=True,
+                    )
+
+                    ax.zaxis.set_rotate_label(False)
+                    ax.set_xlabel(r"$x$", fontsize=28, labelpad=20)
+                    ax.set_ylabel(r"$\tau / \Delta$", fontsize=28, labelpad=20)
+                    ax.set_zlabel(f"{axtitle}", fontsize=28, labelpad=20, rotation=90)
+
+                    ax.tick_params(axis="x", pad=10, labelsize=22)
+                    ax.tick_params(axis="y", pad=10, labelsize=22)
+                    ax.tick_params(axis="z", pad=10, labelsize=22, width=1.5, length=6)
+
+                    ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.25))
+                    ax.yaxis.set_major_locator(mpl.ticker.MultipleLocator(0.5))
+                    ax.zaxis.set_major_locator(mpl.ticker.MaxNLocator(5))
+
+                    xticks = ax.get_xticks()
+                    xtick_labels = [
+                        f"{tick:.1f}" if tick == 0 else str(tick) for tick in xticks
+                    ]
+                    ax.set_xticks(xticks)
+                    ax.set_xticklabels(xtick_labels)
+                    ax.set_yticks(xticks)
+                    ax.set_yticklabels(xtick_labels)
+
+                    ax.set_xlim(0, 1)
+                    ax.set_ylim(0, 1)
+                    ax.set_zlim(zmin, zmax)
+
+                    ax.view_init(elev=25, azim=-140)
+                    ax.xaxis.pane.fill = False
+                    ax.yaxis.pane.fill = False
+                    ax.zaxis.pane.fill = False
+
+                plt.subplots_adjust(
+                    left=0, right=1, top=1, bottom=0, wspace=0, hspace=0
+                )
+
+                if save_fpath:
+                    save_name = Path(
+                        save_fpath.name.split(".")[0]
+                        + f"_fields_{float(dim):.3f}_{step}_paper"
+                        + "."
+                        + save_fpath.name.split(".")[-1]
+                    )
+                    plt.savefig((save_fpath.parent / save_name).as_posix())
+
+                plt.show()
 
     def plot_mismatch_pos_finder(self, save_fpath: Path, spec: str = None) -> None:
 
@@ -2227,6 +2456,7 @@ if __name__ == "__main__":
         choices=[
             "convergence",
             "fields",
+            "fields_paper",
             "initial_data",
             "echoing_period",
             "benchmark",
