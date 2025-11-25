@@ -4,6 +4,85 @@ This project provides a modern `C++` implementation of the critical gravitationa
 
 The framework builds upon spectral methods in logarithmic time and finite-difference integration in space, combined with a Newton–shooting method to solve the resulting non-linear boundary value problem. It supports serial as well as parallel execution using OpenMP, MPI, or a hybrid of both, enabling efficient large-scale simulations on HPC systems.
 
+For a detailed theoretical derivation and extensive performance analysis, please refer to the associated **Master's Thesis**:
+> [**High-Performance Computing for Critical Collapse in General Relativity**](https://repositum.tuwien.at/handle/20.500.12708/220537?mode=full)
+
+---
+
+## Methodology
+
+The physical model describes a massless scalar field $\psi$ coupled to Einstein gravity in $D$ spacetime dimensions under spherical symmetry. Using adapted coordinates $(\tau, x)$ where $\tau$ is logarithmic time and $x$ is a spatial coordinate compactified between the center ($x=0$) and the self-similarity horizon ($x=1$), the Einstein-Klein-Gordon system reduces to a set of coupled non-linear partial differential equations.
+
+### System of Equations
+
+The solver evolves the metric functions $\overline{a}(\tau,x) = a^{-2}$, $f(\tau,x)$ and the auxiliary matter fields $U(\tau,x)$, $V(\tau,x)$ (derivatives of the scalar field along null directions). The resulting first-order system is:
+
+$$
+\partial_x \overline{a} = \frac{8(D-3) - [8(D-3) + (D-2)^3 (U^2+V^2)]\overline{a}}{8x}
+$$
+
+$$
+\partial_x f = \frac{(D-3)}{x}(a^2-1)f
+$$
+
+$$
+\partial_x U = \frac{f[(D-2-2(D-3)a^2)U + (D-2)V] - 2x\partial_\tau U}{2x(f+x)}
+$$
+
+$$
+\partial_x V = \frac{f[(D-2-2(D-3)a^2)V + (D-2)U] + 2x\partial_\tau V}{2x(f-x)}
+$$
+
+$$
+\partial_\tau \overline{a} = \left[\frac{(D-2)^3}{8x}((f+x)U^2 - (f-x)V^2) + (D-3)\right]\overline{a} - (D-3)
+$$
+
+### Regularity Conditions
+To obtain physically valid solutions, regularity conditions are imposed at the boundaries of the compactified domain:
+* **Center ($x=0$):** Local flatness and symmetry require the metric functions to satisfy $a(\tau,0)=1$, $\partial_x a(\tau,0)=0$, and $\partial_x f(\tau,0)=0$. The matter fields must vanish linearly, i.e., $U(\tau,0)=V(\tau,0)=0$.
+* **Self-Similarity Horizon ($x=1$):** To prevent divergences in the evolution equations at the horizon, a specific algebraic constraint involving the matter fields ($U, V$) and the metric must be satisfied. This ensures the solution remains smooth across the sonic point.
+
+### Numerical Algorithm
+
+The problem is formulated as a Boundary Value Problem (BVP). The solution strategy involves:
+1.  **Pseudo-Spectral Decomposition:** The $\tau$-dependence is handled via a Fourier series to enforce periodicity.
+2.  **Shooting Method:** The spatial ODEs are integrated from both boundaries ($x_L, x_R$) to a matching point $x_M$ using an implicit Runge-Kutta scheme.
+3.  **Newton Iteration:** A Newton-Raphson solver adjusts the free initial data functions $\{f_c, \psi_c, U_p\}$ and the echoing period $\Delta$ to minimize the mismatch at $x_M$.
+
+<p align="center">
+  <img src="assets/flowchart_algorithm.png" width="60%">
+  <br>
+  <em>Schematic overview of the numerical algorithm.</em>
+</p>
+
+---
+
+## Performance Results
+
+The code was benchmarked on the **Vienna Scientific Cluster 5 (VSC-5)**. Below are representative scaling results for two specific workload configurations, demonstrating the efficiency of the Hybrid (MPI+OpenMP) parallelization strategy.
+
+### Benchmark S2: Moderate Resolution
+* **Configuration:** $N_\tau = 512$, Spatial Grid Points $= 12,000$.
+* **Observation:** This setup represents a standard workload. The **Hybrid approach (green)** scales effectively up to $\approx 1500$ cores. While OpenMP (blue) saturates within a single node (128 cores) and pure MPI (red) hits communication bottlenecks earlier, the hybrid model maintains higher efficiency at scale by reducing the number of MPI messages.
+
+<p align="center">
+  <img src="assets/s2_speedup.png" width="40%" >
+  <img src="assets/s2_efficiency.png" width="38.5%">
+  <br>
+  <em>Speedup (Left) and Parallel relative Efficiency (Right) for Benchmark S2.</em>
+</p>
+
+### Benchmark S5: High Resolution
+* **Configuration:** $N_\tau = 1024$, Spatial Grid Points $= 16,000$.
+* **Observation:** Doubling the spectral resolution increases the size of the Jacobian matrix, raising the computational density relative to communication. The **Hybrid solver** achieves speedups $>250\times$ on massive core counts ($>2000$), closely following the theoretical Amdahl limit (dashed line). The efficiency plot shows that the hybrid model degrades much slower than pure MPI, making it the only viable strategy for extremely high-resolution simulations.
+
+<p align="center">
+  <img src="assets/s5_speedup.png" width="40%">
+  <img src="assets/s5_efficiency.png" width="38.5%">
+  <br>
+  <em>Speedup (Left) and Parallel relative Efficiency (Right) for Benchmark S5.</em>
+</p>
+
 ---
 
 ## Building
