@@ -50,7 +50,7 @@ The problem is formulated as a Boundary Value Problem (BVP). The solution strate
 3.  **Newton Iteration:** A Newton-Raphson solver adjusts the free initial data functions $\{f_c, \psi_c, U_p\}$ and the echoing period $\Delta$ to minimize the mismatch at $x_M$.
 
 <p align="center">
-  <img src="assets/flowchart_algorithm.png" width="80%">
+  <img src="assets/flowchart_algorithm.png" width="100%">
   <br>
   <em>Schematic overview of the numerical algorithm.</em>
 </p>
@@ -66,8 +66,8 @@ The code was benchmarked on the **Vienna Scientific Cluster 5 (VSC-5)**. Below a
 * **Observation:** This setup represents a standard workload. The **Hybrid approach (green)** scales effectively up to $\approx 1500$ cores. While OpenMP (blue) saturates within a single node (128 cores) and pure MPI (red) hits communication bottlenecks earlier, the hybrid model maintains higher efficiency at scale by reducing the number of MPI messages.
 
 <p align="center">
-  <img src="assets/s2_speedup.png" width="45%" >
-  <img src="assets/s2_efficiency.png" width="43%">
+  <img src="assets/s2_speedup.png" width="50%" >
+  <img src="assets/s2_efficiency.png" width="48%">
   <br>
   <em>Speedup (Left) and Parallel relative Efficiency (Right) for Benchmark S2.</em>
 </p>
@@ -77,8 +77,8 @@ The code was benchmarked on the **Vienna Scientific Cluster 5 (VSC-5)**. Below a
 * **Observation:** Doubling the spectral resolution increases the size of the Jacobian matrix, raising the computational density relative to communication. The **Hybrid solver** achieves speedups $>250\times$ on massive core counts ($>2000$), closely following the theoretical Amdahl limit (dashed line). The efficiency plot shows that the hybrid model degrades much slower than pure MPI, making it the only viable strategy for extremely high-resolution simulations.
 
 <p align="center">
-  <img src="assets/s5_speedup.png" width="45%">
-  <img src="assets/s5_efficiency.png" width="43%">
+  <img src="assets/s5_speedup.png" width="50%">
+  <img src="assets/s5_efficiency.png" width="48%">
   <br>
   <em>Speedup (Left) and Parallel relative Efficiency (Right) for Benchmark S5.</em>
 </p>
