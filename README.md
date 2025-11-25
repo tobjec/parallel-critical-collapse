@@ -59,7 +59,7 @@ The problem is formulated as a Boundary Value Problem (BVP). The solution strate
 
 ## Performance Results
 
-The code was benchmarked on the **Vienna Scientific Cluster 5 (VSC-5)**. Below are representative scaling results for two specific workload configurations, demonstrating the efficiency of the Hybrid (MPI+OpenMP) parallelization strategy.
+The code was benchmarked on the **Vienna Scientific Cluster 5 (VSC-5)**. Below are representative scaling results for two specific workload configurations, demonstrating the efficiency of all three parallelization strategy.
 
 ### Benchmark S2: Moderate Resolution
 * **Configuration:** $N_\tau = 512$, Spatial Grid Points $= 12,000$.
