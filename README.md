@@ -62,7 +62,7 @@ The problem is formulated as a Boundary Value Problem (BVP). The solution strate
 The code was benchmarked on the **Vienna Scientific Cluster 5 (VSC-5)**. Below are representative scaling results for two specific workload configurations, demonstrating the efficiency of all three parallelization strategy.
 
 ### Benchmark S2: Moderate Resolution
-* **Configuration:** $N_\tau = 512$, Spatial Grid Points $= 12,000$.
+* **Configuration:** $N_\tau = 512$, Spatial Grid Points $= 6,000$.
 * **Observation:** This setup represents a standard workload. The **Hybrid approach (green)** scales effectively up to $\approx 1500$ cores. While OpenMP (blue) saturates within a single node (128 cores) and pure MPI (red) hits communication bottlenecks earlier, the hybrid model maintains higher efficiency at scale by reducing the number of MPI messages.
 
 <p align="center">
@@ -73,7 +73,7 @@ The code was benchmarked on the **Vienna Scientific Cluster 5 (VSC-5)**. Below a
 </p>
 
 ### Benchmark S5: High Resolution
-* **Configuration:** $N_\tau = 1024$, Spatial Grid Points $= 16,000$.
+* **Configuration:** $N_\tau = 1024$, Spatial Grid Points $= 8,000$.
 * **Observation:** Doubling the spectral resolution increases the size of the Jacobian matrix, raising the computational density relative to communication. The **Hybrid solver** achieves speedups $>250\times$ on massive core counts ($>2000$), closely following the theoretical Amdahl limit (dashed line). The efficiency plot shows that the hybrid model degrades much slower than pure MPI, making it the only viable strategy for extremely high-resolution simulations.
 
 <p align="center">
