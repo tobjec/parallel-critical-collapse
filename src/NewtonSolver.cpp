@@ -784,7 +784,12 @@ void NewtonSolver::writeFinalOutput(size_t newtonIts, real_t mismatchNorm)
     resultDict["SlowError"] = slowErr;
     resultDict["MaxIterNewton"] = maxIts;
     resultDict["Verbose"] = Verbose;
-    resultDict["Debug"] = Debug;
+    resultDict["Debug"] = config.Debug;
+    if (config.Debug)
+    {
+        resultDict["DebugNx"] = config.DebugNx;
+        resultDict["DebugNtau"] = config.DebugNtau;
+    }
     resultDict["Converged"] = true;
     resultDict["NLeft"] = NLeft;
     resultDict["NRight"] = NRight;
